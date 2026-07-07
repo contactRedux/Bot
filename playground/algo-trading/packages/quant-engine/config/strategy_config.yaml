@@ -1,0 +1,198 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# strategy_config.yaml
+#
+# Per-strategy configuration parameters for the quant-engine.
+# These values are loaded at startup by config/settings.py and consumed by
+# each strategy module in strategies/.
+#
+# All thresholds, windows, and limits can be tuned without touching code.
+# The StrategyOrchestrator reads `allocation_weight` to set how much of the
+# total risk budget each strategy receives (weights are normalised to sum to 1).
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Global portfolio limits ────────────────────────────────────────────────────
+portfolio:
+  # Maximum fraction of portfolio value allowed in a single asset (0–1)
+  max_position_pct: 0.10
+
+  # Maximum daily loss as a fraction of portfolio value before trading halts
+  max_daily_loss_pct: 0.03
+
+  # Maximum peak-to-trough drawdown before the circuit-breaker fires
+  max_drawdown_pct: 0.15
+
+  # Maximum Pearson correlation allowed between two simultaneously held assets.
+  # Holdings above this threshold are flagged as concentration risk.
+  max_correlation_concentration: 0.85
+
+  # Default bar interval used across all strategies when not overridden
+  # Options: "1m" | "5m" | "15m" | "1h" | "1d"
+  default_bar_interval: "1h"
+
+
+# ── Strategy: Momentum ────────────────────────────────────────────────────────
+# Uses LSTM + Transformer ensemble signals to follow price trends.
+# Enters when the blended model signal crosses entry_threshold and confidence
+# is above min_confidence. A cooldown prevents churning after a signal.
+momentum:
+  enabled: true
+  allocation_weight: 0.20   # 20% of risk budget
+
+  # Minimum blended model signal to open a position (range 0–1)
+  entry_threshold: 0.55
+
+  # Minimum model confidence to act on a signal (range 0–1)
+  min_confidence: 0.60
+
+  # Bars to wait after entering before re-evaluating for a new signal
+  cooldown_bars: 4
+
+  # Rolling window (bars) for computing trend context
+  lookback_bars: 50
+
+  # Stop-loss: close position if unrealised loss exceeds this fraction
+  stop_loss_pct: 0.02
+
+  # Take-profit: close position when unrealised gain reaches this fraction
+  take_profit_pct: 0.05
+
+  # Universe of tickers this strategy trades (overridden at runtime via CLI)
+  default_tickers: ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "BTC-USD", "ETH-USD"]
+
+
+# ── Strategy: Mean Reversion ──────────────────────────────────────────────────
+# Trades the statistical tendency of prices to return to their rolling mean.
+# Uses Bollinger Band z-scores for entry; ATR for dynamic stop placement.
+mean_reversion:
+  enabled: true
+  allocation_weight: 0.18
+
+  # Number of bars for the rolling mean and std used in z-score calculation
+  lookback_bars: 20
+
+  # Z-score level at which to enter a counter-trend position
+  entry_z_score: 2.0
+
+  # Z-score at which to exit back to flat (mean-reversion complete)
+  exit_z_score: 0.3
+
+  # ATR multiplier for stop-loss distance from entry price
+  stop_atr_multiplier: 2.0
+
+  # Bollinger Band standard deviation width
+  bollinger_std: 2.0
+
+  default_tickers: ["AAPL", "MSFT", "GOOGL", "META", "SPY"]
+
+
+# ── Strategy: Statistical Arbitrage (Pairs Trading) ──────────────────────────
+# Trades the mean-reverting spread between two cointegrated assets.
+# Spread z-score entry: |z| > entry_z triggers the trade.
+# Exit: |z| < exit_z (spread has reverted).
+stat_arb:
+  enabled: true
+  allocation_weight: 0.20
+
+  # Z-score of the spread at which to open a position
+  entry_z_score: 2.0
+
+  # Z-score at which to close the position (spread normalised)
+  exit_z_score: 0.5
+
+  # Maximum half-life (in bars) of the spread's mean reversion.
+  # Pairs with a half-life longer than this are skipped.
+  max_half_life_bars: 30
+
+  # Minimum Engle-Granger cointegration p-value threshold (lower = more certain)
+  cointegration_pvalue_max: 0.05
+
+  # Rolling window (bars) over which cointegration is tested
+  coint_lookback_bars: 252
+
+  # Pre-configured pairs; stat_arb also auto-discovers pairs via screening
+  default_pairs:
+    - ["AAPL", "MSFT"]
+    - ["GLD", "SLV"]
+    - ["BTC-USD", "ETH-USD"]
+    - ["XOM", "CVX"]
+
+
+# ── Strategy: Market Making ───────────────────────────────────────────────────
+# Places limit orders on both sides of the bid-ask spread to capture the
+# spread as profit. Quotes are adjusted every bar using the RL agent's output.
+# Inventory skew prevents excessive directional exposure.
+market_making:
+  enabled: true
+  allocation_weight: 0.15
+
+  # Base half-spread offset from mid-price as a fraction of price
+  # (e.g. 0.0005 = 5 bps). The RL agent adjusts this dynamically.
+  base_half_spread: 0.0005
+
+  # Maximum inventory (shares / units) on either side before quotes are skewed
+  max_inventory: 100
+
+  # Fraction by which quotes are skewed per unit of inventory imbalance
+  inventory_skew_factor: 0.0001
+
+  # Cancel and repost quotes every N bars
+  requote_interval_bars: 1
+
+  # Tickers amenable to spread capture (high-volume, tight spreads)
+  default_tickers: ["AAPL", "MSFT", "NVDA", "BTC-USD", "ETH-USD"]
+
+
+# ── Strategy: News Sentiment ──────────────────────────────────────────────────
+# Monitors FinBERT sentiment aggregated per ticker over a rolling time window.
+# A significant shift in sentiment z-score triggers a directional trade.
+sentiment:
+  enabled: true
+  allocation_weight: 0.15
+
+  # Rolling window (hours) over which articles are aggregated per ticker
+  sentiment_window_hours: 4
+
+  # Z-score of sentiment change needed to trigger a trade
+  entry_z_score: 2.0
+
+  # Minimum number of articles in the window to consider the signal valid
+  min_article_count: 3
+
+  # Exponential decay half-life (hours) for article age weighting
+  decay_half_life_hours: 2.0
+
+  # Maximum position hold time (bars) before forced exit
+  max_hold_bars: 8
+
+  default_tickers: ["AAPL", "TSLA", "NVDA", "AMZN", "MSFT", "BTC-USD"]
+
+
+# ── Strategy: Macro Factor ────────────────────────────────────────────────────
+# A top-down meta-strategy that:
+#   1. Reduces all strategy allocations during high-fear regimes (VIX > threshold)
+#   2. Cuts equity exposure when the yield curve inverts
+#   3. Emits earnings momentum signals on earnings surprise events
+macro_factor:
+  enabled: true
+  allocation_weight: 0.12
+
+  # VIX level above which all strategy risk budgets are reduced by fear_reduction_factor
+  vix_fear_threshold: 25.0
+
+  # Factor to multiply all other strategy allocation_weights by during fear regime
+  fear_reduction_factor: 0.50
+
+  # 10Y - 2Y yield spread below which yield curve is considered inverted
+  yield_curve_inversion_threshold: 0.0
+
+  # Fraction by which equity exposure is reduced on yield curve inversion
+  equity_reduction_on_inversion: 0.40
+
+  # Earnings surprise z-score (vs. consensus) required to trigger a momentum signal
+  earnings_surprise_z: 2.0
+
+  # VIX ticker symbol (fetched via yfinance)
+  vix_ticker: "^VIX"
+
+  # Update macro regime every N bars
+  regime_update_interval_bars: 4
