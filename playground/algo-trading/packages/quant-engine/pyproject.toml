@@ -58,7 +58,6 @@ data = [
 # ── Machine learning ─────────────────────────────────────────────────────────
 ml = [
     "torch>=2.3",
-    "torchvision>=0.18",
     "gpytorch>=1.12",
     "transformers>=4.41",
     "huggingface-hub>=0.23",
@@ -67,7 +66,6 @@ ml = [
     "scikit-learn>=1.5",
     "stable-baselines3>=2.3",
     "gymnasium>=0.29",
-    "pandas-ta>=0.3",
 ]
 
 # ── API server ───────────────────────────────────────────────────────────────
@@ -82,6 +80,7 @@ dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",
+    "pytest-forked>=1.6",
     "ruff>=0.4",
     "mypy>=1.10",
     "ipykernel>=6.29",

@@ -12,7 +12,7 @@
 #   make install    Install all Python + Node dependencies
 # ──────────────────────────────────────────────────────────────────────────────
 
-.PHONY: dev api dashboard test backtest lint fmt install help
+.PHONY: dev api dashboard test test-models test-cov backtest lint fmt install help
 
 # Paths
 QE := packages/quant-engine
@@ -49,14 +49,24 @@ dashboard:
 	cd $(DASH) && npm run dev
 
 # ── Testing ───────────────────────────────────────────────────────────────────
+#
+# macOS note: LightGBM tests must run in a separate invocation from other
+# ML tests (LSTM/GP/RL) due to an OpenMP library conflict on arm64 Darwin.
+# 'make test-models' handles this by running two pytest invocations in order.
 
 test:
-	@echo "→ Running Python test suite..."
-	cd $(QE) && $(PYTHON) -m pytest tests/ -v --tb=short
+	@echo "→ Running Python test suite (non-model tests)..."
+	cd $(QE) && $(PYTHON) -m pytest tests/ --ignore=tests/models -v --tb=short
+
+test-models:
+	@echo "→ Running ML model tests (LightGBM invocation 1/2)..."
+	cd $(QE) && $(PYTHON) -m pytest tests/models/test_gradient_boosting.py tests/models/test_base.py -v --tb=short
+	@echo "→ Running ML model tests (PyTorch/GP invocation 2/2)..."
+	cd $(QE) && $(PYTHON) -m pytest tests/models/test_models.py tests/models/test_walk_forward.py -v --tb=short
 
 test-cov:
 	@echo "→ Running tests with coverage report..."
-	cd $(QE) && $(PYTHON) -m pytest tests/ --cov=. --cov-report=html -v
+	cd $(QE) && $(PYTHON) -m pytest tests/ --ignore=tests/models --cov=. --cov-report=html -v
 
 # ── Backtesting ───────────────────────────────────────────────────────────────
 # Example: make backtest ARGS="--strategies all --start 2022-01-01 --end 2024-01-01 --tickers AAPL MSFT BTC-USD"
@@ -95,13 +105,14 @@ help:
 	@echo ""
 	@echo "algo-trading monorepo — available commands:"
 	@echo ""
-	@echo "  make install     Install all Python + Node dependencies"
-	@echo "  make dev         Start API server + dashboard (parallel)"
-	@echo "  make api         Start FastAPI server only"
-	@echo "  make dashboard   Start Vite dashboard only"
-	@echo "  make test        Run Python test suite"
-	@echo "  make test-cov    Run tests with HTML coverage report"
-	@echo "  make backtest    Run backtest (customise with ARGS=...)"
-	@echo "  make lint        Lint Python + TypeScript"
-	@echo "  make fmt         Auto-format Python + TypeScript"
+	@echo "  make install        Install all Python + Node dependencies"
+	@echo "  make dev            Start API server + dashboard (parallel)"
+	@echo "  make api            Start FastAPI server only"
+	@echo "  make dashboard      Start Vite dashboard only"
+	@echo "  make test           Run Python test suite (data, features, strategy tests)"
+	@echo "  make test-models    Run ML model tests (two-invocation: LightGBM then PyTorch)"
+	@echo "  make test-cov       Run tests with HTML coverage report"
+	@echo "  make backtest       Run backtest (customise with ARGS=...)"
+	@echo "  make lint           Lint Python + TypeScript"
+	@echo "  make fmt            Auto-format Python + TypeScript"
 	@echo ""

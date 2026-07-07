@@ -11,4 +11,9 @@ models.gradient_boosting — LightGBM tabular model with SHAP interpretability
 models.rl_agent          — PPO reinforcement learning agent (stable-baselines3)
 models.ensemble          — Meta-learner combining all model outputs
 models.registry          — ModelRegistry for artifact save/load
+models.training          — Walk-forward CV and training utilities
 """
+
+from models.base import BaseSignalModel, SignalOutput
+
+__all__ = ["BaseSignalModel", "SignalOutput"]
