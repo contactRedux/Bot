@@ -44,17 +44,15 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
-    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     create_engine,
     event,
-    text,
 )
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from data.schemas import FundamentalSnapshot, NewsArticle, OHLCVBar
 
