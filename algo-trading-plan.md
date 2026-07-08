@@ -301,7 +301,7 @@ Expose the quant engine's capabilities over a REST and WebSocket API so the dash
 
 ### Sub-Task 10 — Trading Dashboard (Frontend)
 
-**Status:** `[ ] pending`
+**Status:** `[x] complete`
 
 **Intent**
 Build a React + TypeScript dashboard in `packages/dashboard/` that consumes the API server and provides a real-time view of portfolio performance, active signals, news sentiment, and strategy-level PnL. Designed as a dark-mode trading terminal.

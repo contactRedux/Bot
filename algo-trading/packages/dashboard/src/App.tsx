@@ -5,6 +5,7 @@ import BacktestExplorer from "@/pages/BacktestExplorer";
 import LiveMonitor from "@/pages/LiveMonitor";
 import NewsFeed from "@/pages/NewsFeed";
 import RiskDashboard from "@/pages/RiskDashboard";
+import { useWebSocketFeed } from "@/hooks/useWebSocketFeed";
 
 /**
  * Root application component.
@@ -15,8 +16,13 @@ import RiskDashboard from "@/pages/RiskDashboard";
  *   /live       → LiveMonitor    (real-time signals + fills + positions)
  *   /news       → NewsFeed       (headlines + FinBERT sentiment scores)
  *   /risk       → RiskDashboard  (VaR, CVaR, drawdown, correlation map)
+ *
+ * The WebSocket feed is initialised here (single connection for the entire app).
  */
 export default function App() {
+  // Single WebSocket connection shared across all pages via Zustand stores
+  useWebSocketFeed();
+
   return (
     <div className="min-h-screen bg-zinc-900 text-zinc-100">
       <NavBar />

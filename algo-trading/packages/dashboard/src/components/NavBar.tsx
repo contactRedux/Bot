@@ -1,8 +1,10 @@
 import { NavLink } from "react-router-dom";
+import { useWsStore } from "@/store";
 
 /**
  * Top navigation bar for the trading terminal.
- * Uses react-router-dom NavLink so the active route gets a highlighted style.
+ * Uses react-router-dom NavLink for active route highlighting.
+ * WS connection indicator is wired to the wsStore.
  */
 const links = [
   { to: "/", label: "Overview" },
@@ -13,6 +15,13 @@ const links = [
 ];
 
 export default function NavBar() {
+  const connected = useWsStore((s) => s.connected);
+  const lastHeartbeat = useWsStore((s) => s.lastHeartbeat);
+
+  const hbAge = lastHeartbeat
+    ? Math.round((Date.now() - new Date(lastHeartbeat).getTime()) / 1_000)
+    : null;
+
   return (
     <nav className="border-b border-zinc-700 bg-zinc-800 px-4">
       <div className="mx-auto flex max-w-screen-2xl items-center gap-6 py-3">
@@ -42,10 +51,20 @@ export default function NavBar() {
           ))}
         </div>
 
-        {/* Status indicator — will be wired to WebSocket state in Sub-Task 10 */}
+        {/* WebSocket status indicator */}
         <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
-          <span className="inline-block h-2 w-2 rounded-full bg-zinc-600" />
-          <span>DISCONNECTED</span>
+          <span
+            className={`inline-block h-2 w-2 rounded-full transition-colors ${
+              connected ? "bg-emerald-400" : "bg-rose-400"
+            }`}
+          />
+          <span className={connected ? "text-emerald-400" : "text-zinc-500"}>
+            {connected
+              ? hbAge !== null
+                ? `LIVE · ${hbAge}s`
+                : "CONNECTED"
+              : "DISCONNECTED"}
+          </span>
         </div>
       </div>
     </nav>
