@@ -35,8 +35,7 @@ order book snapshots (potentially millions of rows/day) would overwhelm SQLite.
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import (
@@ -205,15 +204,26 @@ class DataStore:
                                     datetime(2023,12,31, tzinfo=timezone.utc))
     """
 
-    def __init__(self, database_url: str, echo: bool = False) -> None:
-        self._engine = create_engine(database_url, echo=echo)
+    def __init__(
+        self,
+        database_url: str,
+        echo: bool = False,
+        connect_args: dict | None = None,
+        poolclass: type | None = None,
+    ) -> None:
+        engine_kwargs: dict = {"echo": echo}
+        if connect_args is not None:
+            engine_kwargs["connect_args"] = connect_args
+        if poolclass is not None:
+            engine_kwargs["poolclass"] = poolclass
+        self._engine = create_engine(database_url, **engine_kwargs)
 
         # Enable WAL mode for SQLite — dramatically improves concurrent read
         # performance when the data pipeline is writing while the API reads.
         if database_url.startswith("sqlite"):
             @event.listens_for(self._engine, "connect")
-            def _set_sqlite_pragma(dbapi_conn, connection_record):
-                cursor = dbapi_conn.cursor()
+            def _set_sqlite_pragma(dbapi_conn: object, connection_record: object) -> None:
+                cursor = dbapi_conn.cursor()  # type: ignore[attr-defined]
                 cursor.execute("PRAGMA journal_mode=WAL;")
                 cursor.execute("PRAGMA foreign_keys=ON;")
                 cursor.close()
@@ -265,12 +275,14 @@ class DataStore:
         ]
 
         stmt = sqlite_insert(OHLCVBarRow).values(rows)
-        do_nothing = stmt.on_conflict_do_nothing(index_elements=["ticker", "interval", "event_timestamp"])
+        do_nothing = stmt.on_conflict_do_nothing(
+            index_elements=["ticker", "interval", "event_timestamp"]
+        )
 
         with self._Session() as session:
             result = session.execute(do_nothing)
             session.commit()
-            inserted = result.rowcount
+            inserted: int = result.rowcount  # type: ignore[attr-defined]
 
         logger.debug("datastore.write_bars", attempted=len(bars), inserted=inserted)
         return inserted
@@ -391,7 +403,7 @@ class DataStore:
         with self._Session() as session:
             result = session.execute(do_nothing)
             session.commit()
-            inserted = result.rowcount
+            inserted: int = result.rowcount  # type: ignore[attr-defined]
 
         logger.debug("datastore.write_news", attempted=len(articles), inserted=inserted)
         return inserted
@@ -535,7 +547,7 @@ class DataStore:
         with self._Session() as session:
             result = session.execute(do_nothing)
             session.commit()
-            inserted = result.rowcount
+            inserted: int = result.rowcount  # type: ignore[attr-defined]
 
         logger.debug(
             "datastore.write_fundamentals",
@@ -612,62 +624,59 @@ class DataStore:
 
 def _row_to_bar(row: OHLCVBarRow) -> OHLCVBar:
     """Convert an ORM row to a Pydantic OHLCVBar model (restores UTC timezone)."""
-    from datetime import timezone as tz
     return OHLCVBar(
-        ticker=row.ticker,
-        interval=row.interval,
-        open=row.open,
-        high=row.high,
-        low=row.low,
-        close=row.close,
-        volume=row.volume,
-        event_timestamp=row.event_timestamp.replace(tzinfo=tz.utc),
-        fetch_timestamp=row.fetch_timestamp.replace(tzinfo=tz.utc),
-        source=row.source,
-        adjusted=row.adjusted,
+        ticker=row.ticker,       # type: ignore[arg-type]
+        interval=row.interval,   # type: ignore[arg-type]
+        open=row.open,           # type: ignore[arg-type]
+        high=row.high,           # type: ignore[arg-type]
+        low=row.low,             # type: ignore[arg-type]
+        close=row.close,         # type: ignore[arg-type]
+        volume=row.volume,       # type: ignore[arg-type]
+        event_timestamp=row.event_timestamp.replace(tzinfo=UTC),  # type: ignore[union-attr]
+        fetch_timestamp=row.fetch_timestamp.replace(tzinfo=UTC),  # type: ignore[union-attr]
+        source=row.source,       # type: ignore[arg-type]
+        adjusted=row.adjusted,   # type: ignore[arg-type]
     )
 
 
 def _row_to_news(row: NewsArticleRow) -> NewsArticle:
     """Convert an ORM row to a Pydantic NewsArticle model."""
-    from datetime import timezone as tz
-    tickers = row.tickers.split(",") if row.tickers else []
+    tickers = row.tickers.split(",") if row.tickers else []  # type: ignore[union-attr]
     return NewsArticle(
-        article_id=row.article_id,
-        title=row.title,
-        body=row.body,
-        url=row.url,
-        source=row.source,
-        author=row.author,
+        article_id=row.article_id,  # type: ignore[arg-type]
+        title=row.title,            # type: ignore[arg-type]
+        body=row.body,              # type: ignore[arg-type]
+        url=row.url,                # type: ignore[arg-type]
+        source=row.source,          # type: ignore[arg-type]
+        author=row.author,          # type: ignore[arg-type]
         tickers=tickers,
-        event_timestamp=row.event_timestamp.replace(tzinfo=tz.utc),
-        fetch_timestamp=row.fetch_timestamp.replace(tzinfo=tz.utc),
-        sentiment_score=row.sentiment_score,
+        event_timestamp=row.event_timestamp.replace(tzinfo=UTC),  # type: ignore[union-attr]
+        fetch_timestamp=row.fetch_timestamp.replace(tzinfo=UTC),  # type: ignore[union-attr]
+        sentiment_score=row.sentiment_score,  # type: ignore[arg-type]
     )
 
 
 def _row_to_fundamental(row: FundamentalRow) -> FundamentalSnapshot:
     """Convert an ORM row to a Pydantic FundamentalSnapshot model."""
-    from datetime import timezone as tz
     return FundamentalSnapshot(
-        ticker=row.ticker,
-        period=row.period,  # type: ignore[arg-type]
-        period_end_date=row.period_end_date.replace(tzinfo=tz.utc),
-        report_date=row.report_date.replace(tzinfo=tz.utc),
-        revenue=row.revenue,
-        gross_profit=row.gross_profit,
-        operating_income=row.operating_income,
-        net_income=row.net_income,
-        eps_reported=row.eps_reported,
-        eps_consensus=row.eps_consensus,
-        eps_surprise=row.eps_surprise,
-        pe_ratio=row.pe_ratio,
-        pb_ratio=row.pb_ratio,
-        ev_ebitda=row.ev_ebitda,
-        debt_to_equity=row.debt_to_equity,
-        return_on_equity=row.return_on_equity,
-        currency=row.currency or "USD",
-        source=row.source,
-        event_timestamp=row.event_timestamp.replace(tzinfo=tz.utc),
-        fetch_timestamp=row.fetch_timestamp.replace(tzinfo=tz.utc),
+        ticker=row.ticker,                  # type: ignore[arg-type]
+        period=row.period,                  # type: ignore[arg-type]
+        period_end_date=row.period_end_date.replace(tzinfo=UTC),  # type: ignore[union-attr]
+        report_date=row.report_date.replace(tzinfo=UTC),          # type: ignore[union-attr]
+        revenue=row.revenue,                # type: ignore[arg-type]
+        gross_profit=row.gross_profit,      # type: ignore[arg-type]
+        operating_income=row.operating_income,   # type: ignore[arg-type]
+        net_income=row.net_income,          # type: ignore[arg-type]
+        eps_reported=row.eps_reported,      # type: ignore[arg-type]
+        eps_consensus=row.eps_consensus,    # type: ignore[arg-type]
+        eps_surprise=row.eps_surprise,      # type: ignore[arg-type]
+        pe_ratio=row.pe_ratio,              # type: ignore[arg-type]
+        pb_ratio=row.pb_ratio,              # type: ignore[arg-type]
+        ev_ebitda=row.ev_ebitda,            # type: ignore[arg-type]
+        debt_to_equity=row.debt_to_equity,  # type: ignore[arg-type]
+        return_on_equity=row.return_on_equity,   # type: ignore[arg-type]
+        currency=row.currency or "USD",     # type: ignore[arg-type]
+        source=row.source,                  # type: ignore[arg-type]
+        event_timestamp=row.event_timestamp.replace(tzinfo=UTC),  # type: ignore[union-attr]
+        fetch_timestamp=row.fetch_timestamp.replace(tzinfo=UTC),  # type: ignore[union-attr]
     )

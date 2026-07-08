@@ -110,3 +110,8 @@ asyncio_mode = "auto"
 python_version = "3.11"
 strict = false
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["api.*", "config.settings", "data.store", "execution.base", "strategies.base"]
+disallow_untyped_defs = true
+warn_return_any = true

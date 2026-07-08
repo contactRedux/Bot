@@ -12,6 +12,7 @@ import type {
   BacktestResponse,
   BacktestStatusResponse,
   PortfolioResponse,
+  PriceHistoryResponse,
   RiskStatusResponse,
   SignalsResponse,
   StrategiesResponse,
@@ -39,6 +40,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const fetchPortfolio = (): Promise<PortfolioResponse> =>
   request<PortfolioResponse>("/portfolio/positions");
+
+export const fetchPriceHistory = (
+  ticker: string,
+  interval = "1d",
+  limit = 365,
+): Promise<PriceHistoryResponse> =>
+  request<PriceHistoryResponse>(
+    `/api/portfolio/price-history?ticker=${encodeURIComponent(ticker)}&interval=${interval}&limit=${limit}`,
+  );
 
 // ---------------------------------------------------------------------------
 // Signals

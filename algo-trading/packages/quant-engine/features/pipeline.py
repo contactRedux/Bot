@@ -54,20 +54,23 @@ Usage
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-
 import structlog
 
-from features.technical import add_all_technical
 from features.fundamental import (
     add_fundamental_features,
     align_fundamentals_to_price_index,
     snapshots_to_dataframe,
 )
 from features.sentiment import build_sentiment_timeseries
+from features.technical import add_all_technical
+
+if TYPE_CHECKING:
+    from data.schemas import OrderBook
 
 logger = structlog.get_logger(__name__)
 
@@ -118,6 +121,7 @@ class FeaturePipeline:
         macro_cache: pd.DataFrame | None = None,
         sentiment_window_hours: int = 24,
         ffill_limit: int = _MAX_FFILL_LIMIT,
+        order_book: OrderBook | None = None,
     ) -> None:
         self.store = store
         self.include_technical = include_technical
@@ -127,6 +131,8 @@ class FeaturePipeline:
         self._macro_cache = macro_cache
         self.sentiment_window_hours = sentiment_window_hours
         self.ffill_limit = ffill_limit
+        # Latest order book snapshot — updated externally via set_order_book()
+        self._order_book: OrderBook | None = order_book
 
     # ── Primary interface ─────────────────────────────────────────────────────
 
@@ -212,6 +218,16 @@ class FeaturePipeline:
             if not macro.empty:
                 feature_parts.append(macro)
                 logger.debug("pipeline.macro_done", ticker=ticker, cols=len(macro.columns))
+
+        # ── Step 5.5: Order-book imbalance ─────────────────────────────────────
+        obi = self._compute_order_book_imbalance(self._order_book)
+        if not np.isnan(obi):
+            # Broadcast scalar to a constant column aligned to the price index
+            obi_series = pd.DataFrame(
+                {"order_book_imbalance": obi}, index=price_index
+            )
+            feature_parts.append(obi_series)
+            logger.debug("pipeline.obi_done", ticker=ticker, obi=round(obi, 4))
 
         if not feature_parts:
             logger.warning("pipeline.no_features_computed", ticker=ticker)
@@ -377,6 +393,40 @@ class FeaturePipeline:
             return pd.DataFrame()
 
     # ── Utility ───────────────────────────────────────────────────────────────
+
+    def set_order_book(self, order_book: OrderBook | None) -> None:
+        """
+        Update the latest order book snapshot for the next ``build()`` call.
+
+        Called by the live data pipeline after each order book update from
+        Binance or Alpaca.  The snapshot is used by ``build()`` to compute
+        the order_book_imbalance feature for the current bar.
+
+        Setting to ``None`` (or when no live data is available) causes
+        ``build()`` to emit ``NaN`` for the order_book_imbalance column,
+        which is handled gracefully by downstream models via NaN imputation.
+        """
+        self._order_book = order_book
+
+    @staticmethod
+    def _compute_order_book_imbalance(order_book: OrderBook | None) -> float:
+        """
+        Compute order-book imbalance from the top-5 bid/ask levels.
+
+        Returns
+        -------
+        float
+            Imbalance ∈ [-1, +1].  Positive → buy pressure; negative → sell pressure.
+            ``float("nan")`` when no order book data is available.
+        """
+        if order_book is None:
+            return float("nan")
+        bid_vol = sum(level.quantity for level in order_book.bids[:5])
+        ask_vol = sum(level.quantity for level in order_book.asks[:5])
+        total = bid_vol + ask_vol
+        if total <= 0:
+            return float("nan")
+        return (bid_vol - ask_vol) / total
 
     def set_macro_cache(self, macro_df: pd.DataFrame) -> None:
         """

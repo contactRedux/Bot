@@ -37,7 +37,7 @@ from __future__ import annotations
 import logging
 import traceback
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -113,19 +113,19 @@ def _run_backtest_sync(
         use_all = "all" in requested
 
         orchestrator = StrategyOrchestrator(
-            tickers=req.tickers,
-            strategy_configs=strategy_configs,
+            strategies=[],
+            config=strategy_configs,
         )
         if not use_all:
-            for sid in list(orchestrator._strategies.keys()):
-                if sid not in requested:
-                    orchestrator._strategies[sid]._enabled = False
+            for strat in list(orchestrator._all_strategies):
+                if strat.strategy_id not in requested:
+                    strat._enabled = False  # type: ignore[attr-defined]
 
         engine = BacktestEngine(
             bars=bars,
             orchestrator=orchestrator,
             initial_capital=req.initial_capital,
-            interval=req.interval,
+            bar_interval=req.interval,
         )
         report = engine.run()
 
@@ -166,7 +166,7 @@ def _run_backtest_sync(
             bar_interval=req.interval,
             halted=False,
             halt_reason="",
-            created_at=datetime.now(datetime.UTC).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
             error=str(exc),
         ).model_dump()
 

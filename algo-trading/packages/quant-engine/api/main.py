@@ -44,6 +44,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -132,12 +133,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             with open(config_path) as f:
                 strategy_configs = yaml.safe_load(f) or {}
         state.orchestrator = StrategyOrchestrator(
-            tickers=["AAPL", "MSFT", "BTC-USD"],
-            strategy_configs=strategy_configs,
+            strategies=[],
+            config=strategy_configs,
         )
         logger.info("StrategyOrchestrator initialised")
     except Exception as exc:
         logger.warning("StrategyOrchestrator init failed: %s", exc)
+
+    # ── DataStore ─────────────────────────────────────────────────────────────
+    try:
+        from data.store import DataStore
+        db_url = getattr(app_settings, "database_url", "sqlite:///./algo_trading.db")
+        state.data_store = DataStore(db_url)
+        logger.info("DataStore initialised (url=%s)", db_url.split("@")[-1])
+    except Exception as exc:
+        logger.warning("DataStore init failed: %s", exc)
 
     # ── Attach state to app ───────────────────────────────────────────────────
     # Only set app_state if it hasn't been pre-loaded by tests
@@ -211,9 +221,11 @@ async def health(request: Request) -> HealthResponse:
         except Exception:
             broker_ok = False
 
-    overall = "ok" if broker_ok or state.trading_mode == "dev" else "degraded"
+    _status: Literal["ok", "degraded"] = (
+        "ok" if broker_ok or state.trading_mode == "dev" else "degraded"
+    )
     return HealthResponse(
-        status=overall,
+        status=_status,
         version=state.version,
         trading_mode=state.trading_mode,
         broker_connected=broker_ok,

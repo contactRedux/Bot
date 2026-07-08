@@ -21,6 +21,7 @@
     "zustand": "^4.5.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.47.0",
     "@eslint/js": "^9.9.0",
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^18.3.3",

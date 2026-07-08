@@ -6,19 +6,16 @@ and without requiring a real server.  AppState is patched with controlled stubs.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
-
 import pytest
 from fastapi.testclient import TestClient
 
 from api.deps import AppState
 from api.main import app
-from risk.limits import RiskLimits
-from risk.monitor import DrawdownMonitor
-from risk.manager import RiskManager
+from data.store import DataStore
 from execution.paper_broker import PaperBroker
-
+from risk.limits import RiskLimits
+from risk.manager import RiskManager
+from risk.monitor import DrawdownMonitor
 
 # ---------------------------------------------------------------------------
 # Minimal stub orchestrator
@@ -60,11 +57,21 @@ def _make_state(
     broker = PaperBroker(initial_cash=100_000.0)
     broker.update_prices({"AAPL": 150.0, "MSFT": 300.0})
 
+    # Use StaticPool so all sessions share the same in-memory SQLite connection.
+    # Without this, each session/connection gets its own blank database.
+    from sqlalchemy.pool import StaticPool
+    store = DataStore(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
     state = AppState(
         broker=broker,
         monitor=monitor,
         risk_manager=risk_mgr,
         orchestrator=_StubOrchestrator(),
+        data_store=store,
         equity_history=equity_history or list(range(100_000, 100_300)),
         trading_mode="dev",
     )

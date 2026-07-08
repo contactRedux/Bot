@@ -159,6 +159,26 @@ export interface StrategiesResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Price history (from GET /api/portfolio/price-history)
+// ---------------------------------------------------------------------------
+
+export interface PriceHistoryPoint {
+  time: string;     // "YYYY-MM-DD" for daily bars, "YYYY-MM-DDTHH:MM" for intraday
+  close: number;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  volume?: number | null;
+}
+
+export interface PriceHistoryResponse {
+  ticker: string;
+  interval: string;
+  points: PriceHistoryPoint[];
+  count: number;
+}
+
+// ---------------------------------------------------------------------------
 // News (from store — shape comes via WS feed payload)
 // ---------------------------------------------------------------------------
 

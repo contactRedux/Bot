@@ -361,6 +361,85 @@ A structured documentation layer in `packages/quant-engine/docs/concepts/` that 
 
 ---
 
+---
+
+### Phase 1 — Security / Runtime Prerequisites
+
+**Status:** `[x] complete`
+
+**What was built**
+- `Makefile` — `--host 0.0.0.0` → `--host 127.0.0.1`; Python interpreter resolves to `python3.11` first
+- `config/settings.py` — 4 new settings: `OIDC_ISSUER_URL`, `OIDC_AUDIENCE`, `API_REQUIRED_ROLE` (default `operator`), `AWS_SECRETS_PREFIX`
+- `api/deps.py` — `require_operator` FastAPI dependency: no-op in dev (OIDC not configured), JWT validation + role check in prod (PyJWT + JWKS, RS256/ES256, flat `roles` and Keycloak `realm_access.roles` supported). `data_store: DataStore` field added to `AppState`.
+- Protected mutation endpoints: `POST /api/backtest/run`, `DELETE /api/backtest/{run_id}`, `PATCH /api/strategies/{id}`, `POST /api/risk/resume`
+- Structured AUDIT log lines on every control-plane mutation (action, identifiers, trading_mode, client IP)
+- `.env.example` — OIDC and AWS Secrets Manager vars documented
+- `README.md` — localhost binding security note, new env vars in reference table
+- `tests/api/test_auth.py` — 10 new tests
+
+---
+
+### Phase 2 — Bloomberg B-PIPE Full Implementation
+
+**Status:** `[x] complete`
+
+**What was built**
+- `data/feeds/bloomberg_feed.py` — optional `blpapi` import (startup is clean when absent). `fetch_bars` via `HistoricalDataRequest`, `fetch_news` via `NEWS_STORY_RT_REQUEST`. `BloombergFeed.is_available()` pre-check.
+- `config/settings.py` — 4 new settings: `BLOOMBERG_HOST` (`localhost`), `BLOOMBERG_PORT` (`8194`), `BLOOMBERG_APP_NAME`, `BLOOMBERG_TIMEOUT_SECONDS` (`30`)
+- `data/pipeline.py` — provider-priority policy: Bloomberg first for equity bars/news, fallback to free sources when unavailable
+- `features/sentiment.py` — source-quality weights: Bloomberg 2.0×, NewsAPI 1.0×, GDELT 0.8×
+- `data/feeds/__init__.py` — `BloombergFeed` exported
+- `pyproject.toml` — `[bloomberg]` optional dependency group with `blpapi>=3.19`
+- `tests/data/test_bloomberg_feed.py` — 15 new tests
+
+---
+
+### Phase 3 — AWS Terraform IaC Baseline
+
+**Status:** `[x] complete`
+
+**What was built**
+
+11 Terraform files in `infra/terraform/`:
+
+| File | Provisions |
+|------|-----------|
+| `providers.tf` | AWS ~5.50, Terraform ≥1.7, S3 backend stub |
+| `variables.tf` | All inputs — region, AZs, CPU/memory, DB class, `db_password` (sensitive=true) |
+| `main.tf` | Common locals, `common_tags`, AZ resolution |
+| `network.tf` | VPC, public+private subnets ×2 AZs, IGW, NAT gateway, route tables |
+| `ecr.tf` | ECR repo: scan-on-push, immutable tags, lifecycle (keep 10 tagged, expire untagged 1 day) |
+| `ecs.tf` | ECS cluster + CW log group + task def (non-root UID 1001, readonlyRootFilesystem, drop ALL capabilities, Secrets Manager injection) + Fargate service |
+| `iam.tf` | Execution role (ECR pull + SM read) + task role (S3 least-priv, scoped CW metrics, ECS Exec) |
+| `rds.tf` | RDS PostgreSQL 16, private subnets, encrypted, deletion-protected, 7-day backups |
+| `s3.tf` | Artifacts bucket: public access blocked ×4, AES-256, versioning, lifecycle (Glacier 90d, expire 365d) |
+| `secrets.tf` | Secrets Manager for API keys + DB URL; `ignore_changes` prevents Terraform overwriting real secrets |
+| `outputs.tf` | ECR URL, ECS names, RDS endpoint, S3/secret ARNs |
+
+Updated: `docs/concepts/aws_cloud.md` (Section 10: Terraform IaC Baseline), `README.md` (AWS Terraform Deployment section).
+
+---
+
+### Phase 4 — PriceChart REST OHLC Wiring
+
+**Status:** `[x] complete`
+
+**What was built**
+- `api/schemas.py` — `PriceHistoryPoint` + `PriceHistoryResponse` schemas
+- `api/routes/portfolio.py` — `GET /api/portfolio/price-history?ticker=&interval=&limit=` endpoint; reads from `DataStore.read_bars()`, interval-aware lookback window, returns close/OHLCV points
+- `api/deps.py` — `data_store: DataStore` field added to `AppState`
+- `api/main.py` — DataStore initialized in lifespan and attached to AppState
+- `data/store.py` — `DataStore.__init__` accepts `connect_args` and `poolclass` kwargs (needed for `StaticPool` in tests)
+- `tests/api/test_portfolio.py` — 14 new tests (empty store, response shape, ticker/interval echo, limit validation, real seeded bars, shape verification, limit trimming, None store graceful fallback)
+- `tests/api/conftest.py` — DataStore wired into test AppState using `StaticPool` for correct in-memory connection sharing
+- `src/lib/types.ts` — `PriceHistoryPoint` + `PriceHistoryResponse` TypeScript interfaces
+- `src/lib/api.ts` — `fetchPriceHistory(ticker, interval, limit)` typed REST helper
+- `src/pages/Overview.tsx` — replaces `data={[]}` with `useQuery` + `fetchPriceHistory`, refreshes every 60s
+
+**Cumulative test count:** 567 passing non-model tests (570 collected, 3 skipped) + 37 model tests = **604 total, 0 failures**.
+
+
+
 ## Technology Summary
 
 | Layer | Technology | Reason |
@@ -389,11 +468,27 @@ A structured documentation layer in `packages/quant-engine/docs/concepts/` that 
 
 ---
 
-## Non-Goals (Phase 2)
+## Non-Goals (current scope)
 
 - **Options trading** — Black-Scholes pricing, Greeks (delta, gamma, vega), options chain data via Polygon.io. A well-defined separate phase.
 - **HFT / sub-millisecond latency** — the system operates on minute-to-daily bars. True HFT requires co-location and specialized infrastructure.
 - **Automated hyperparameter tuning** — Bayesian optimization / AutoML. Models start with manually set hyperparameters; tuning can be layered in later.
 - **Multi-user / SaaS** — single-user personal trading platform only.
-- **Full Bloomberg implementation** — `bloomberg_feed.py` is scaffolded and documented; production B-PIPE integration requires a live university/enterprise connection.
-- **Full AWS deployment** — infra is documented and env vars are wired; Terraform/CDK IaC is queued as a post-Sub-Task-11 phase.
+
+---
+
+## Institutional-Grade Upgrade Phases (next-steps.md)
+
+These phases are tracked in detail in `next-steps.md`. Summary:
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| 1 — Security/runtime | ✅ **Complete** | localhost binding, OIDC auth seam, RBAC, audit logging |
+| 2 — Bloomberg B-PIPE | ✅ **Complete** | Full `bloomberg_feed.py` adapter, priority policy, sentiment weighting |
+| 3 — AWS Terraform IaC | ✅ **Complete** | 11 `.tf` files: VPC, ECR, ECS Fargate, RDS, S3, Secrets Manager, IAM, CloudWatch |
+| 4 — PriceChart OHLC wiring | ✅ **Complete** | `GET /api/portfolio/price-history`, typed frontend, `Overview.tsx` live data |
+| 5 — Integration/E2E tests | 🔲 **Next** | Backend integration tests + optional Playwright E2E |
+| 6 — mypy --strict hardening | 🔲 **Planned** | Incremental strict typing on API + store + execution modules |
+| 7 — Execution realism | 🔲 **Planned** | Partial fills, queue-aware fill model, latency/slippage knobs, order-book imbalance feature |
+
+**Current test baseline:** 567 passing non-model tests + 37 model tests = **604 total, 0 failures**.

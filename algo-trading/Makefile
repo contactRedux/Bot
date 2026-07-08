@@ -12,7 +12,7 @@
 #   make install    Install all Python + Node dependencies
 # ──────────────────────────────────────────────────────────────────────────────
 
-.PHONY: dev api dashboard test test-models test-cov backtest lint fmt install help
+.PHONY: dev api dashboard test test-models test-cov test-integration test-e2e backtest lint fmt install help
 
 # Paths
 QE := packages/quant-engine
@@ -68,6 +68,15 @@ test-cov:
 	@echo "→ Running tests with coverage report..."
 	cd $(QE) && $(PYTHON) -m pytest tests/ --ignore=tests/models --cov=. --cov-report=html -v
 
+test-integration:
+	@echo "→ Running integration tests..."
+	cd $(QE) && $(PYTHON) -m pytest tests/integration/ -v --tb=short
+
+test-e2e:
+	@echo "→ Running Playwright E2E tests (requires running dev server on :5173)..."
+	@echo "   Start the server first with: make dev"
+	cd $(DASH) && npx playwright test
+
 # ── Backtesting ───────────────────────────────────────────────────────────────
 # Example: make backtest ARGS="--strategies all --start 2022-01-01 --end 2024-01-01 --tickers AAPL MSFT BTC-USD"
 
@@ -115,4 +124,6 @@ help:
 	@echo "  make backtest       Run backtest (customise with ARGS=...)"
 	@echo "  make lint           Lint Python + TypeScript"
 	@echo "  make fmt            Auto-format Python + TypeScript"
+	@echo "  make test-integration Run backend integration tests"
+	@echo "  make test-e2e       Run Playwright E2E tests (needs running dev server)"
 	@echo ""

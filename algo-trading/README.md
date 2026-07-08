@@ -57,13 +57,9 @@ The purpose of this project is to provide a single platform where quant research
 
 The next roadmap is focused on moving the platform from a strong research/paper-trading stack toward a more institutional-grade system:
 
-- Bloomberg B-PIPE full implementation
-- AWS Terraform-based infrastructure baseline
-- Price chart REST OHLC wiring for the dashboard
 - Integration and E2E test coverage
 - Incremental hardening toward `mypy --strict`
 - Execution realism improvements such as partial fills, queue awareness, and microstructure features
-- Security/runtime upgrades including localhost-safe defaults, authentication, RBAC, secret management, and auditability
 
 ---
 
@@ -249,6 +245,53 @@ S3_BUCKET_NAME=my-algo-trading-bucket
 ```
 
 When these are set, the model registry uses S3 for artifact storage and backtest reports are persisted to S3. The database URL is overridden with RDS when deploying to ECS. See [`docs/concepts/aws_cloud.md`](packages/quant-engine/docs/concepts/aws_cloud.md) for the full deployment guide.
+
+---
+
+## AWS Terraform Deployment
+
+The full AWS infrastructure baseline lives in [`infra/terraform/`](infra/terraform). It provisions:
+
+- **VPC** with public + private subnets across 2 AZs, NAT gateway for private-subnet egress
+- **ECR** repository for the quant-engine Docker image (scan-on-push, immutable tags)
+- **ECS Fargate** cluster + service running the quant-engine API as a non-root container
+- **RDS PostgreSQL 16** in private subnets, encrypted, deletion-protected, with automated backups
+- **S3** artifacts bucket (AES-256 encrypted, versioned, lifecycle archival to Glacier)
+- **Secrets Manager** for all API keys and the database URL — never stored in task definitions
+- **IAM** execution + task roles with least-privilege policies
+- **CloudWatch** log group with 90-day retention
+
+**Prerequisites:** [Terraform ≥ 1.7](https://developer.hashicorp.com/terraform/install) installed locally.
+
+```bash
+cd infra/terraform
+
+# 1. Create a terraform.tfvars file (never commit this):
+cat > terraform.tfvars <<EOF
+aws_account_id      = "123456789012"
+s3_bucket_name      = "my-algo-trading-artifacts"
+db_password         = "choose-a-strong-password"
+container_image_tag = "latest"
+EOF
+
+# 2. Initialise, validate, and plan
+terraform init
+terraform validate
+terraform fmt -check
+terraform plan
+
+# 3. Apply (creates all AWS resources)
+terraform apply
+
+# 4. After first apply — populate secrets with real values:
+aws secretsmanager put-secret-value \
+  --secret-id algo-trading-prod/api-keys \
+  --secret-string '{"alpaca_api_key":"...","alpaca_secret_key":"...","newsapi_key":"..."}'
+```
+
+> **Security note:** The ECS task is configured to run as UID 1001 (non-root), with a
+> read-only root filesystem and all Linux capabilities dropped. Secrets are injected
+> from Secrets Manager at runtime — no API keys appear in task definition plaintext.
 
 ---
 

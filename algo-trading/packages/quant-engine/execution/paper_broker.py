@@ -65,7 +65,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -110,6 +110,9 @@ class PaperBroker(ExecutionBroker):
         vol_impact_pct: float = 0.0,
         random_slippage_pct: float = 0.0,
         seed: int = 42,
+        partial_fill_mode: bool = False,
+        volume_participation_rate: float = 0.05,
+        simulated_bar_volume: float = 1_000_000.0,
     ) -> None:
         self._cash = float(initial_cash)
         self.commission_rate = commission_rate
@@ -117,6 +120,11 @@ class PaperBroker(ExecutionBroker):
         self.vol_impact_pct = vol_impact_pct
         self.random_slippage_pct = random_slippage_pct
         self._rng = np.random.default_rng(seed)
+
+        # Partial fill simulation (off by default for backward compatibility)
+        self.partial_fill_mode = partial_fill_mode
+        self.volume_participation_rate = volume_participation_rate
+        self.simulated_bar_volume = simulated_bar_volume
 
         # Latest mark prices provided by the engine
         self._prices: dict[str, float] = {}
@@ -138,9 +146,14 @@ class PaperBroker(ExecutionBroker):
         Process an order and return a FillEvent.
 
         Market orders are filled immediately at the current mark price plus
-        slippage.  Limit/stop orders are checked against mark price; if the
-        limit is not met they are stored as pending (and will NOT be triggered
-        in future bars unless you call ``check_pending_orders()``).
+        slippage.  When ``partial_fill_mode`` is True, market order fills are
+        capped at ``simulated_bar_volume × volume_participation_rate`` — the
+        remainder is returned as a PARTIAL status fill with the unfilled
+        quantity in ``metadata["remaining_qty"]``.
+
+        Limit/stop orders are checked against mark price; if the limit is not
+        met they are stored as pending (and will NOT be triggered in future bars
+        unless you call ``check_pending_orders()``).
         """
         order_id = str(uuid.uuid4())[:8]
         mark_price = self._prices.get(order.ticker, 0.0)
@@ -189,6 +202,13 @@ class PaperBroker(ExecutionBroker):
             execution_price = float(order.limit_price)
         else:
             execution_price = mark_price
+
+        # ── Partial fill simulation for market orders ─────────────────────────
+        if (
+            self.partial_fill_mode
+            and order.order_type == OrderType.MARKET
+        ):
+            return self._execute_partial(order, execution_price, order_id)
 
         return self._execute(order, execution_price, order_id)
 
@@ -241,10 +261,6 @@ class PaperBroker(ExecutionBroker):
         return OrderStatus.CANCELLED  # unknown = treated as gone
 
     def get_account(self) -> dict[str, Any]:
-        portfolio_value = sum(
-            self._prices.get(t, 0.0) * 0.0  # positions tracked by Portfolio, not broker
-            for t in self._prices
-        )
         return {
             "cash": round(self._cash, 2),
             "portfolio_value": round(self._cash, 2),  # broker has no position view
@@ -270,6 +286,49 @@ class PaperBroker(ExecutionBroker):
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
+    def _execute_partial(
+        self, order: Order, base_price: float, order_id: str
+    ) -> FillEvent:
+        """
+        Execute a market order with volume-participation-rate capping.
+
+        Returns a PARTIAL status when the full quantity cannot be filled
+        against the simulated bar volume.  The unfilled remainder is stored in
+        ``metadata["remaining_qty"]``.
+        """
+        max_fillable = self.simulated_bar_volume * self.volume_participation_rate
+        fill_qty = min(order.quantity, max_fillable)
+        remaining = order.quantity - fill_qty
+
+        slippage = self._compute_slippage(order)
+        if order.side == OrderSide.BUY:
+            fill_price = base_price * (1.0 + slippage)
+        else:
+            fill_price = base_price * (1.0 - slippage)
+
+        commission = fill_price * fill_qty * self.commission_rate
+        self._cash += -fill_price * fill_qty * (1 if order.side == OrderSide.BUY else -1)
+        self._cash -= commission
+
+        status = OrderStatus.FILLED if remaining <= 0 else OrderStatus.PARTIAL
+        fill = FillEvent(
+            order=order,
+            status=status,
+            filled_quantity=fill_qty,
+            fill_price=round(fill_price, 6),
+            commission=round(commission, 4),
+            broker_order_id=order_id,
+            slippage=round(slippage * base_price, 6),
+            timestamp=datetime.now(UTC),
+            metadata={"remaining_qty": round(remaining, 6)} if remaining > 0 else {},
+        )
+        self._fills.append(fill)
+        logger.debug(
+            "PaperBroker PARTIAL: %s %s %.4f/%.4f @ %.4f",
+            order.side.value.upper(), order.ticker, fill_qty, order.quantity, fill_price,
+        )
+        return fill
+
     def _execute(self, order: Order, base_price: float, order_id: str) -> FillEvent:
         """Compute slippage, commission, and create the FillEvent."""
         slippage = self._compute_slippage(order)
@@ -290,7 +349,7 @@ class PaperBroker(ExecutionBroker):
             commission=round(commission, 4),
             broker_order_id=order_id,
             slippage=round(slippage * base_price, 6),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
         self._fills.append(fill)
         logger.debug(

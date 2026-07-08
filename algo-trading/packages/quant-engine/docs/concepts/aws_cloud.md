@@ -226,3 +226,44 @@ For a personal / paper-trading deployment (single region, us-east-1):
 | **Total** | | **~$26/month** |
 
 Free tier covers the first 12 months of RDS (750 hrs/month db.t3.micro) and reduces the cost to ~$11/month initially.
+
+---
+
+## 10. Terraform IaC Baseline
+
+The `infra/terraform/` directory provides a reproducible, security-hardened AWS deployment. The module files map directly to the architecture above:
+
+| File | Resources provisioned |
+|------|----------------------|
+| `providers.tf` | AWS provider, Terraform version constraint |
+| `variables.tf` | All input variables (region, instance class, passwords, etc.) |
+| `main.tf` | Common locals, data sources, tag strategy |
+| `network.tf` | VPC, public/private subnets, IGW, NAT gateway, route tables |
+| `ecr.tf` | ECR repository with scan-on-push and lifecycle policy |
+| `ecs.tf` | ECS cluster, task definition (non-root, secrets-injected), Fargate service |
+| `iam.tf` | Execution role (ECR pull, secrets read) + task role (S3, CloudWatch, ECS Exec) |
+| `rds.tf` | RDS PostgreSQL 16 in private subnets, encrypted, deletion-protected |
+| `s3.tf` | S3 artifacts bucket, public access block, SSE-AES256, versioning, lifecycle |
+| `secrets.tf` | Secrets Manager secrets for API keys and DB credentials (placeholder values) |
+| `outputs.tf` | Exported values: ECR URL, RDS endpoint, S3 bucket ARN, secret ARNs |
+
+**Security controls applied across all resources:**
+
+- ECS tasks run as non-root UID 1001 (`USER 1001` in Dockerfile)
+- `readonlyRootFilesystem: true` on the container; `/tmp` exposed via tmpfs
+- All Linux capabilities dropped (`capabilities.drop = ["ALL"]`)
+- Services bound to `127.0.0.1` inside the container; external access only via ALB (future phase)
+- API keys and DB password stored only in Secrets Manager — injected at task startup
+- S3 public access blocked on all four dimensions; server-side encryption enforced
+- RDS not publicly accessible; security group restricts 5432 to ECS task SG only
+- CloudWatch log retention set to 90 days (minimum per security policy)
+- IAM policies follow least-privilege: no wildcard resources on sensitive actions
+
+**Validation commands** (run from `infra/terraform/`):
+
+```bash
+terraform init
+terraform fmt -check   # HCL formatting check
+terraform validate     # syntax + reference validation
+terraform plan         # preview changes before applying
+```

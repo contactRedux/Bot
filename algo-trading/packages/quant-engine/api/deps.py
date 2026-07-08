@@ -68,6 +68,7 @@ class AppState:
     risk_manager: Any = None       # RiskManager
     orchestrator: Any = None       # StrategyOrchestrator
     portfolio: Any = None          # Portfolio (live state)
+    data_store: Any = None         # DataStore (SQLAlchemy-backed market data)
 
     # Backtest run cache: run_id → BacktestResponse dict
     backtest_results: dict[str, dict] = field(default_factory=dict)
@@ -96,7 +97,8 @@ class AppState:
 
 def get_app_state(request: Request) -> AppState:
     """Return the AppState attached to the running FastAPI app."""
-    return request.app.state.app_state  # type: ignore[attr-defined]
+    state: AppState = request.app.state.app_state  # type: ignore[attr-defined]
+    return state
 
 
 def get_monitor(request: Request) -> Any:

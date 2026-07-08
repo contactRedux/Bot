@@ -30,7 +30,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Shared sub-models
 # ---------------------------------------------------------------------------
@@ -139,6 +138,24 @@ class BacktestStatusResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Portfolio
 # ---------------------------------------------------------------------------
+
+class PriceHistoryPoint(BaseModel):
+    """One close-price data point returned by ``GET /api/portfolio/price-history``."""
+
+    time: str    # ISO date string, e.g. "2024-01-15"
+    close: float
+    open: float | None = None
+    high: float | None = None
+    low: float | None = None
+    volume: float | None = None
+
+
+class PriceHistoryResponse(BaseModel):
+    ticker: str
+    interval: str
+    points: list[PriceHistoryPoint]
+    count: int
+
 
 class PositionItem(BaseModel):
     ticker: str
