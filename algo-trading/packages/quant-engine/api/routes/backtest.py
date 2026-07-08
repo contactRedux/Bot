@@ -75,7 +75,7 @@ def _run_backtest_sync(
         from strategies.orchestrator import StrategyOrchestrator
 
         # Build per-ticker bar dicts from yfinance (silent fallback on error)
-        bars: dict[str, Any] = {}
+        raw_bars: dict[str, Any] = {}
         try:
             import yfinance as yf
             for ticker in req.tickers:
@@ -88,13 +88,19 @@ def _run_backtest_sync(
                     progress=False,
                 )
                 if not raw.empty:
-                    bars[ticker] = raw
+                    raw_bars[ticker] = raw
         except Exception as exc:
             logger.warning("yfinance download failed (%s); using synthetic bars", exc)
 
-        if not bars:
+        if not raw_bars:
             # Synthetic fallback for testing without network
-            bars = _synthetic_bars(req.tickers, req.start_date, req.end_date)
+            raw_bars = _synthetic_bars(req.tickers, req.start_date, req.end_date)
+
+        # Convert DataFrames → list[OHLCVBar] so BacktestEngine gets typed objects
+        bars: dict[str, Any] = {
+            ticker: _df_to_ohlcv_bars(ticker, df, req.interval)
+            for ticker, df in raw_bars.items()
+        }
 
         # Build a minimal orchestrator
         from pathlib import Path
@@ -169,6 +175,66 @@ def _run_backtest_sync(
             created_at=datetime.now(UTC).isoformat(),
             error=str(exc),
         ).model_dump()
+
+
+def _df_to_ohlcv_bars(
+    ticker: str,
+    df: "pd.DataFrame",  # noqa: F821
+    interval: str,
+) -> list[Any]:
+    """
+    Convert a yfinance/synthetic OHLCV DataFrame into a list of OHLCVBar
+    instances that BacktestEngine._build_bar_events() can iterate over.
+
+    yfinance multi-ticker downloads produce a MultiIndex column DataFrame;
+    single-ticker downloads produce a flat column DataFrame.  Both cases
+    are handled by normalising column names and flattening as needed.
+    """
+    import pandas as pd
+    from data.schemas import OHLCVBar
+
+    # yfinance multi-ticker: columns are (field, ticker) MultiIndex — flatten
+    if isinstance(df.columns, pd.MultiIndex):
+        df = df.xs(ticker, axis=1, level=1) if ticker in df.columns.get_level_values(1) else df
+        df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
+
+    # Normalise column names to lowercase
+    df = df.copy()
+    df.columns = [str(c).split(",")[0].strip().lower() for c in df.columns]
+
+    now = datetime.now(UTC)
+    bars: list[OHLCVBar] = []
+    for ts, row in df.iterrows():
+        try:
+            # ts can be a Timestamp or a tuple (multi-index row) — normalise
+            if isinstance(ts, tuple):
+                ts = ts[0]
+            event_ts = pd.Timestamp(ts).to_pydatetime()
+            if event_ts.tzinfo is None:
+                event_ts = event_ts.replace(tzinfo=UTC)
+            open_ = float(row.get("open", row.get("Open", 0.0)))
+            high = float(row.get("high", row.get("High", open_)))
+            low = float(row.get("low", row.get("Low", open_)))
+            close = float(row.get("close", row.get("Close", open_)))
+            volume = float(row.get("volume", row.get("Volume", 0.0)))
+            if open_ <= 0 or high <= 0 or low <= 0 or close <= 0:
+                continue
+            bars.append(OHLCVBar(
+                ticker=ticker,
+                interval=interval,
+                open=open_,
+                high=max(high, open_, close),
+                low=min(low, open_, close),
+                close=close,
+                volume=volume,
+                event_timestamp=event_ts,
+                fetch_timestamp=now,
+                source="yfinance",
+                adjusted=True,
+            ))
+        except Exception:
+            continue
+    return bars
 
 
 def _synthetic_bars(

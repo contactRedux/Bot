@@ -107,8 +107,8 @@ export default function BacktestExplorer() {
   // Form state
   const [tickerInput, setTickerInput]   = useState("AAPL,MSFT");
   const [strategies, setStrategies]     = useState<string[]>(["momentum"]);
-  const [startDate, setStartDate]       = useState("2022-01-01");
-  const [endDate, setEndDate]           = useState("2024-01-01");
+  const [startDate, setStartDate]       = useState("2024-01-01");
+  const [endDate, setEndDate]           = useState("2026-07-01");
   const [capital, setCapital]           = useState(100_000);
   const [interval, setInterval]         = useState("1d");
 

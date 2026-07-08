@@ -106,6 +106,25 @@ class Settings(BaseSettings):
         default=None,
         description="NewsAPI.org API key — free tier: 100 requests/day",
     )
+    fmp_api_key: str | None = Field(
+        default=None,
+        description=(
+            "Financial Modeling Prep API key — free tier: 250 req/day. "
+            "Used for real-time news, press releases, earnings calendars, and SEC filings."
+        ),
+    )
+    reddit_client_id: str | None = Field(
+        default=None,
+        description="Reddit API client ID for r/wallstreetbets / r/investing sentiment scraping.",
+    )
+    reddit_client_secret: str | None = Field(
+        default=None,
+        description="Reddit API client secret.",
+    )
+    reddit_user_agent: str | None = Field(
+        default="quant-engine/0.1.0",
+        description="Reddit API user agent string.",
+    )
 
     # ── Alpha Vantage (fundamentals) ─────────────────────────────────────────
     alpha_vantage_key: str | None = Field(

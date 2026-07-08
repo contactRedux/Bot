@@ -144,10 +144,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         from data.store import DataStore
         db_url = getattr(app_settings, "database_url", "sqlite:///./algo_trading.db")
+        # Guard against invalid URLs in .env (e.g. placeholder values)
+        if not db_url or not any(db_url.startswith(p) for p in ("sqlite", "postgresql", "mysql", "oracle", "mssql")):
+            logger.warning("DATABASE_URL %r looks invalid — falling back to SQLite", db_url)
+            db_url = "sqlite:///./algo_trading.db"
         state.data_store = DataStore(db_url)
         logger.info("DataStore initialised (url=%s)", db_url.split("@")[-1])
     except Exception as exc:
-        logger.warning("DataStore init failed: %s", exc)
+        logger.warning("DataStore init failed: %s — falling back to in-memory SQLite", exc)
+        try:
+            from data.store import DataStore
+            state.data_store = DataStore("sqlite:///./algo_trading.db")
+            logger.info("DataStore initialised with fallback SQLite")
+        except Exception as exc2:
+            logger.warning("DataStore fallback also failed: %s", exc2)
 
     # ── Attach state to app ───────────────────────────────────────────────────
     # Only set app_state if it hasn't been pre-loaded by tests

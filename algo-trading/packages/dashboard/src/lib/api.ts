@@ -1,10 +1,9 @@
 /**
  * lib/api.ts — Typed fetch wrappers for the FastAPI backend.
  *
- * Base URL is read from VITE_API_BASE_URL (defaults to http://localhost:8000).
- * During development, Vite proxies /api → http://localhost:8000 so calls
- * can use relative paths. We use the full base URL so this also works when
- * the app is served independently.
+ * All paths use the /api/ prefix to match the FastAPI router prefixes.
+ * In development, Vite proxies /api/* → http://localhost:8000/api/* (no rewrite).
+ * VITE_API_BASE_URL can be set to override the base for non-local deployments.
  */
 
 import type {
@@ -39,7 +38,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // ---------------------------------------------------------------------------
 
 export const fetchPortfolio = (): Promise<PortfolioResponse> =>
-  request<PortfolioResponse>("/portfolio/positions");
+  request<PortfolioResponse>("/api/portfolio");
 
 export const fetchPriceHistory = (
   ticker: string,
@@ -55,17 +54,17 @@ export const fetchPriceHistory = (
 // ---------------------------------------------------------------------------
 
 export const fetchSignals = (): Promise<SignalsResponse> =>
-  request<SignalsResponse>("/signals/latest");
+  request<SignalsResponse>("/api/signals");
 
 // ---------------------------------------------------------------------------
 // Risk
 // ---------------------------------------------------------------------------
 
 export const fetchRiskStatus = (): Promise<RiskStatusResponse> =>
-  request<RiskStatusResponse>("/risk/status");
+  request<RiskStatusResponse>("/api/risk/status");
 
 export const resumeTrading = (newEquity?: number): Promise<{ success: boolean; message: string }> =>
-  request("/risk/resume", {
+  request("/api/risk/resume", {
     method: "POST",
     body: JSON.stringify({ new_equity: newEquity ?? null }),
   });
@@ -75,13 +74,13 @@ export const resumeTrading = (newEquity?: number): Promise<{ success: boolean; m
 // ---------------------------------------------------------------------------
 
 export const fetchStrategies = (): Promise<StrategiesResponse> =>
-  request<StrategiesResponse>("/strategies");
+  request<StrategiesResponse>("/api/strategies");
 
 export const toggleStrategy = (
   id: string,
   enabled: boolean,
 ): Promise<StrategyInfo> =>
-  request<StrategyInfo>(`/strategies/${id}/toggle`, {
+  request<StrategyInfo>(`/api/strategies/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ enabled }),
   });
@@ -91,13 +90,13 @@ export const toggleStrategy = (
 // ---------------------------------------------------------------------------
 
 export const runBacktest = (body: BacktestRequest): Promise<BacktestResponse> =>
-  request<BacktestResponse>("/backtest/run", {
+  request<BacktestResponse>("/api/backtest/run", {
     method: "POST",
     body: JSON.stringify(body),
   });
 
 export const fetchBacktestStatus = (runId: string): Promise<BacktestStatusResponse> =>
-  request<BacktestStatusResponse>(`/backtest/status/${runId}`);
+  request<BacktestStatusResponse>(`/api/backtest/${runId}/status`);
 
 export const fetchBacktestResult = (runId: string): Promise<BacktestResponse> =>
-  request<BacktestResponse>(`/backtest/result/${runId}`);
+  request<BacktestResponse>(`/api/backtest/${runId}`);
