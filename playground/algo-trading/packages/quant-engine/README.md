@@ -15,22 +15,53 @@ pip install -e ".[data,ml,api,dev]"
 ```
 quant-engine/
 ├── config/        Settings (pydantic-settings), structured logging
-├── data/          Feeds (yfinance, Alpaca, Binance, NewsAPI, GDELT, AV, EDGAR), DataStore, DataPipeline
+├── data/          Feeds (yfinance, Alpaca, Binance, NewsAPI, GDELT, AV, EDGAR, Bloomberg), DataStore, DataPipeline
 ├── features/      Technical, statistical, fundamental, sentiment, macro indicators + FeaturePipeline
 ├── models/        LSTM, Transformer, GP, LightGBM, PPO RL, ensemble
 ├── strategies/    Momentum, mean reversion, stat-arb, market-making, sentiment, macro factor
 ├── backtesting/   Event-driven engine, simulated broker, portfolio, metrics
-├── risk/          RiskManager, VaR/CVaR, drawdown monitor
-├── execution/     Paper + Alpaca + Binance broker adapters
-├── api/           FastAPI REST + WebSocket endpoints
-└── tests/         Pytest test suite
+├── risk/          RiskManager, VaR/CVaR, drawdown monitor, correlation checker
+├── execution/     Paper + Alpaca + Binance broker adapters + BrokerFactory
+├── api/           FastAPI REST + WebSocket server
+│   ├── routes/    backtest, portfolio, risk, signals, strategies
+│   ├── ws/        WebSocket feed (/ws/feed)
+│   ├── schemas.py Pydantic request/response models
+│   └── main.py    App entry point (lifespan, CORS, routers)
+└── tests/         Pytest test suite (risk/, execution/, api/, …)
 ```
 
 ## Running tests
 
 ```bash
-pytest tests/ -v --tb=short
+# All non-model tests (risk, execution, api, backtesting, …)
+pytest tests/ --ignore=tests/models -v --tb=short
+
+# Just the API tests
+pytest tests/api/ -v
 ```
+
+## API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Health check + uptime |
+| GET | `/` | API info + doc links |
+| POST | `/api/backtest/run` | Trigger a new backtest |
+| GET | `/api/backtest/{id}` | Retrieve completed result |
+| GET | `/api/backtest/{id}/status` | Poll run progress |
+| GET | `/api/backtest/list` | List all cached runs |
+| GET | `/api/portfolio` | Live portfolio state |
+| GET | `/api/portfolio/history` | Equity curve history |
+| GET | `/api/portfolio/trades` | Recent fills |
+| GET | `/api/risk/status` | Risk snapshot (VaR, drawdown, halt) |
+| POST | `/api/risk/resume` | Clear a trading halt |
+| GET | `/api/risk/var` | Latest VaR/CVaR |
+| GET | `/api/risk/limits` | Current RiskLimits config |
+| GET | `/api/risk/audit` | Recent non-APPROVE decisions |
+| GET | `/api/signals` | Latest signals from all strategies |
+| GET | `/api/strategies` | List all strategies |
+| PATCH | `/api/strategies/{id}` | Enable/disable at runtime |
+| WS | `/ws/feed` | Real-time event stream |
 
 ## Trading modes
 

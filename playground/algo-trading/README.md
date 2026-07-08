@@ -151,10 +151,12 @@ Concept documentation is in `packages/quant-engine/docs/concepts/`:
 | Database | SQLite (dev) / PostgreSQL (prod) via SQLAlchemy |
 | Equities Execution | Alpaca |
 | Crypto Execution | Binance |
+| Market Data (premium) | Bloomberg B-PIPE / blpapi (Student Plan) |
 | Frontend | React + TypeScript + Vite |
 | Charting | Recharts |
 | Styling | Tailwind CSS (dark mode) |
 | State | Zustand |
+| Cloud | AWS (ECS/Fargate, RDS, S3, CloudWatch) |
 
 ---
 
@@ -172,8 +174,49 @@ make fmt          # Format Python (ruff) + TypeScript (prettier)
 
 ---
 
+## Bloomberg Data Integration
+
+The platform is designed to accept a Bloomberg data feed alongside the free-tier sources.
+Bloomberg provides institutional-grade pricing, fundamentals, and news — all weighted more
+heavily than free sources when both are available.
+
+To activate Bloomberg:
+1. Subscribe to the **Bloomberg Student Plan** (via your university portal)
+2. Install `blpapi`: `pip install blpapi` (requires Bloomberg Desktop / B-PIPE connection)
+3. Set `BLOOMBERG_APP_NAME` in your `.env` file
+4. The `BloombergFeed` adapter in `data/feeds/bloomberg.py` (coming in a future sub-task)
+   will be loaded automatically when the key is present
+
+**Free-source weighting policy:** when both Bloomberg and a free source (yfinance,
+Alpha Vantage, NewsAPI, GDELT) provide the same data point, Bloomberg's value is used.
+Free sources remain active as fallbacks and for data types Bloomberg does not cover
+(e.g. social sentiment, GDELT geopolitical events).
+
+---
+
+## Cloud Infrastructure (AWS)
+
+The system is designed to deploy to **AWS** as the standard cloud provider:
+
+| Component | AWS Service |
+|---|---|
+| API server (container) | ECS Fargate |
+| Database (PostgreSQL) | RDS (db.t3.medium) |
+| Model artefact storage | S3 |
+| Logs & alerts | CloudWatch + SNS |
+| Secrets management | AWS Secrets Manager |
+| Domain + TLS | Route 53 + ACM |
+
+Infrastructure-as-code (Terraform / CDK) will be added as a dedicated sub-task after the
+core platform is complete.  The `DATABASE_URL` env var already supports PostgreSQL via
+`postgresql+asyncpg://…` — switching from SQLite to RDS is a one-line `.env` change.
+
+---
+
 ## Phase 2 (Not Yet Implemented)
 
 - Options chain trading (Black-Scholes pricing, Greeks, Polygon.io options data)
 - Automated hyperparameter tuning (Bayesian optimisation)
 - HFT / tick-level strategies
+- Bloomberg `blpapi` full feed integration
+- AWS Terraform/CDK infrastructure-as-code
