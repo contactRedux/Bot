@@ -73,187 +73,109 @@ All sources below are included — the system ingests from all of them simultane
 
 ### Sub-Task 1 — Monorepo Scaffolding and Environment Setup
 
-**Status:** `[ ] pending`
+**Status:** `[x] complete`
 
-**Intent**
-Establish the monorepo directory structure, Python virtual environment, Node toolchain, dependency management, shared configuration system, and basic logging. Everything downstream depends on this foundation being clean and reproducible.
+**What was built**
+- `algo-trading/` monorepo with full directory tree, `.gitignore`, `.env.example`
+- `packages/quant-engine/pyproject.toml` with dependency groups: `data`, `ml`, `api`, `dev`
+- `config/settings.py` — `pydantic-settings` with `TradingMode` enum (`dev`/`paper`/`live`)
+- `config/strategy_config.yaml` — full per-strategy YAML config for all 6 strategies
+- `config/logging.py` — structured `structlog` logger
+- `packages/dashboard/` — Vite + React + TypeScript scaffold with Tailwind CSS dark mode
+- Root `Makefile` with `dev`, `test`, `test-models`, `backtest`, `lint`, `fmt`, `install` targets
+- All core Python deps installed in `.venv` at `packages/quant-engine/.venv`
 
-**Expected Outcomes**
-- `algo-trading/` monorepo exists with the full directory layout above.
-- `packages/quant-engine/` has a Python package structure and `pyproject.toml` with dependency groups.
-- `packages/dashboard/` has a Vite + React + TypeScript scaffold with Tailwind CSS.
-- A single root-level `.env.example` documents every API key and config variable needed across both packages.
-- A root `Makefile` provides top-level developer commands (`make dev`, `make test`, `make backtest`, `make lint`).
-- Environment variables are loaded via `pydantic-settings` in Python and `import.meta.env` in Vite.
-- A central `config/settings.py` supports three modes: `dev`, `paper`, `live`.
-- A structured logger (`structlog`) is configured and reused throughout the Python package.
-
-**Todo List**
-1. Create the root `algo-trading/` directory and initialize a git repo with a `.gitignore` covering Python, Node, and secrets.
-2. Create the full `packages/quant-engine/` directory tree.
-3. Set up `packages/quant-engine/pyproject.toml` with dependency groups: `core`, `data`, `ml`, `api`, `dev`.
-4. Install core Python dependencies: `pandas`, `numpy`, `scipy`, `pydantic`, `pydantic-settings`, `structlog`, `httpx`, `websockets`, `APScheduler`.
-5. Implement `config/settings.py` using `pydantic-settings` — reads `.env` for all API keys, DB URL, `TRADING_MODE` (`dev`/`paper`/`live`).
-6. Create `config/strategy_config.yaml` — YAML file defining per-strategy parameters (lookback windows, position limits, signal thresholds) for every strategy in Sub-Task 5.
-7. Scaffold `packages/dashboard/` using `npm create vite@latest` with the React + TypeScript template.
-8. Install frontend dependencies: `tailwindcss`, `recharts`, `@tanstack/react-query`, `zustand`, `socket.io-client`, `react-router-dom`.
-9. Configure Tailwind for dark mode (`darkMode: 'class'`).
-10. Add root-level `.env.example` documenting: `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `BINANCE_API_KEY`, `BINANCE_SECRET_KEY`, `NEWSAPI_KEY`, `ALPHA_VANTAGE_KEY`, `POLYGON_KEY`, `DATABASE_URL`, `TRADING_MODE`.
-11. Write root `Makefile` with targets: `dev` (start API + dashboard), `test` (pytest), `backtest` (run CLI), `lint` (ruff + eslint).
-
-**Relevant Context**
-- A single `.env` at the repo root is shared between both packages — the Python backend reads it via `pydantic-settings` and Vite reads it as `VITE_*` prefixed vars.
-- `pydantic-settings` is critical for preventing accidental live-mode activation: the `TRADING_MODE` env var gates whether the live broker adapter is ever instantiated.
+**Known issues / deviations**
+- `pandas-ta` is not on PyPI for Python 3.11 arm64; removed from `ml` group. Technical indicators are implemented manually in `features/technical.py` without it.
+- `torchvision` removed from `ml` group (not needed).
+- `pytest-forked` added to `dev` group to handle macOS OpenMP isolation for LightGBM tests.
 
 ---
 
 ### Sub-Task 2 — Data Ingestion Layer
 
-**Status:** `[ ] pending`
+**Status:** `[x] complete`
 
-**Intent**
-Build a unified data ingestion system that fetches, normalizes, and stores market data (OHLCV, order book snapshots, fundamentals, news) from all data sources. All downstream feature engineering and modeling consumes data through this layer — consistency here prevents data leakage and look-ahead bias in backtests.
+**What was built**
+- `data/schemas.py` — `OHLCVBar`, `Trade`, `OrderBook`, `NewsArticle`, `FundamentalSnapshot` Pydantic models with `fetch_timestamp`/`event_timestamp` separation
+- `data/feeds/` — 8 feed adapters: `yfinance_feed.py`, `alpaca_feed.py`, `coingecko_feed.py`, `binance_feed.py`, `newsapi_feed.py`, `gdelt_feed.py`, `alpha_vantage_feed.py`, `sec_edgar_feed.py`
+- `data/store.py` — `DataStore` wrapping SQLAlchemy with `write_bars()`, `read_bars()`, `write_news()`, `read_news()`, `write_fundamentals()`, `read_fundamentals()`
+- `data/pipeline.py` — `DataPipeline` orchestrator using APScheduler
 
-**Expected Outcomes**
-- A `DataFeed` base class with concrete implementations for every provider.
-- Historical OHLCV data fetchable for equities and crypto.
-- Real-time price streaming via Alpaca WebSocket and Binance WebSocket.
-- News headlines ingested from both NewsAPI and GDELT, stored with timestamps and tickers.
-- Fundamental data (P/E, EPS, revenue, earnings surprise) fetchable from Alpha Vantage and SEC EDGAR.
-- All data normalized to a canonical schema and stored in SQLite (dev) or PostgreSQL (prod) via `SQLAlchemy`.
-
-**Todo List**
-1. Define canonical data schemas in `data/schemas.py`: `OHLCVBar`, `Trade`, `OrderBook`, `NewsArticle`, `FundamentalSnapshot` as Pydantic models. Each record has both `fetch_timestamp` and `event_timestamp`.
-2. Implement `data/feeds/yfinance_feed.py` — historical OHLCV for equities.
-3. Implement `data/feeds/alpaca_feed.py` — real-time equities streaming (WebSocket) and historical bars (REST).
-4. Implement `data/feeds/coingecko_feed.py` — historical and polling-based crypto OHLCV.
-5. Implement `data/feeds/binance_feed.py` — real-time crypto price streaming and order book snapshots via Binance WebSocket.
-6. Implement `data/feeds/newsapi_feed.py` — fetches top headlines and searches by ticker keyword; stores `NewsArticle` records.
-7. Implement `data/feeds/gdelt_feed.py` — polls GDELT GKG (Global Knowledge Graph) API for financial news events; maps to `NewsArticle` schema.
-8. Implement `data/feeds/alpha_vantage_feed.py` — fetches fundamental data (P/E ratio, EPS, revenue, earnings date) and stores `FundamentalSnapshot` records.
-9. Implement `data/feeds/sec_edgar_feed.py` — fetches earnings filings and computes earnings surprise (actual EPS vs. consensus estimate).
-10. Build `data/store.py` — `DataStore` class wrapping SQLAlchemy with `write_bars()`, `read_bars()`, `write_news()`, `read_news()`, `write_fundamentals()`, `read_fundamentals()`.
-11. Add `data/pipeline.py` — `DataPipeline` orchestrator using APScheduler: runs real-time feeds continuously, polls REST feeds on configurable intervals.
-
-**Relevant Context**
-- `fetch_timestamp` vs `event_timestamp` separation is non-negotiable for backtesting correctness. A news article published at 9:30am must never be used by a strategy that is simulated at 9:25am.
-- GDELT is a massive public dataset — use the streaming API endpoint rather than bulk downloads. Filter by `tone` and `themes` fields to pre-filter financial relevance.
-- SEC EDGAR earnings surprise = (reported EPS − consensus estimate) / |consensus estimate|. This is a powerful short-term signal.
+**Test coverage:** All data layer tests green (part of the 171-test suite).
 
 ---
 
 ### Sub-Task 3 — Feature Engineering Pipeline
 
-**Status:** `[ ] pending`
+**Status:** `[x] complete`
 
-**Intent**
-Transform raw OHLCV, fundamental, and news data into structured, ML-ready feature vectors. Good features are the single biggest driver of model performance in quantitative trading. This layer produces the inputs to all strategy models.
+**What was built**
+- `features/technical.py` — 40 technical indicators: EMA (9/21/50/200), MACD, ADX, Ichimoku Cloud, RSI, Stochastic, ROC, Williams %R, Bollinger Bands, ATR, Keltner Channels, HV, VWAP, OBV, Volume Z-Score, Chaikin Money Flow
+- `features/statistical.py` — rolling Pearson/Spearman correlation, Engle-Granger cointegration, Johansen cointegration, spread z-scores, Ornstein-Uhlenbeck half-life
+- `features/fundamental.py` — P/E z-score, EPS growth, earnings surprise magnitude, revenue surprise
+- `features/sentiment.py` — FinBERT (`ProsusAI/finbert`) article scoring, exponential decay aggregation, per-ticker time-series
+- `features/macro.py` — VIX level, yield curve slope, USD momentum, macro regime classification (`RISK_ON`/`RISK_OFF`/`CRISIS`)
+- `features/pipeline.py` — `FeaturePipeline` with `build()`, `build_multi()`, `feature_names()`, `set_macro_cache()`
+- `tests/features/` — look-ahead bias verification for all indicator groups
 
-**Expected Outcomes**
-- A `FeaturePipeline` class that accepts raw data and returns a clean, aligned feature matrix with no data leakage.
-- Technical indicator features covering trend, momentum, volatility, and volume dimensions.
-- Statistical features for cross-asset relationships (cointegration, correlation, spread z-scores).
-- Fundamental features: valuation ratios, earnings surprise, revenue growth.
-- NLP sentiment features: per-article FinBERT sentiment scores aggregated per-ticker per-time-window.
-- All features computed in a walk-forward manner safe for backtesting.
-
-**Todo List**
-1. Install `pandas-ta` for technical indicators (pure Python, no C compiler required).
-2. Implement `features/technical.py` — the following indicator groups, each as a function that takes a DataFrame and returns new column(s):
-   - **Trend:** EMA (9, 21, 50, 200), MACD, ADX, Ichimoku Cloud
-   - **Momentum:** RSI, Stochastic Oscillator, Rate of Change (ROC), Williams %R
-   - **Volatility:** Bollinger Bands, ATR, Keltner Channels, Historical Volatility (HV)
-   - **Volume:** VWAP, OBV (On-Balance Volume), Volume Z-Score, Chaikin Money Flow
-3. Implement `features/statistical.py` — rolling pair correlations (Pearson and Spearman), Engle-Granger cointegration test scores, Johansen cointegration for baskets, spread z-scores.
-4. Implement `features/fundamental.py` — normalizes `FundamentalSnapshot` data into ML features: P/E z-score vs. sector, EPS growth rate, earnings surprise magnitude, revenue surprise.
-5. Install `transformers` (HuggingFace) and load `ProsusAI/finbert`.
-6. Implement `features/sentiment.py` — `score_article(text) -> float` using FinBERT; `aggregate_sentiment(articles, ticker, window) -> pd.Series` returning mean score, score std dev, and article count per window.
-7. Implement `features/macro.py` — derives macro-regime features: VIX level (from yfinance `^VIX`), yield curve slope (10Y − 2Y spread from FRED or Alpha Vantage), USD index momentum. These condition the strategy orchestrator's risk appetite.
-8. Implement `features/pipeline.py` — `FeaturePipeline` class that chains all feature modules, aligns on a common time index, forward-fills missing values (with a capped fill limit), and returns a named feature matrix.
-9. Add `tests/features/` — unit tests verifying no look-ahead bias in every feature function (assert no column uses data beyond its own row's timestamp).
-
-**Relevant Context**
-- FinBERT (`ProsusAI/finbert`) is purpose-built for financial text. It outputs `positive`, `negative`, `neutral` labels with confidence scores — map to a scalar in `[-1, +1]`.
-- Ichimoku Cloud is a favourite among momentum traders — it encodes trend, support/resistance, and momentum in a single indicator.
-- The macro features in `features/macro.py` are used by the Strategy Orchestrator (Sub-Task 5) to scale down overall risk exposure during high-VIX regimes.
+**Bugs fixed during implementation**
+- `rolling_spearman_correlation` replaced broken pandas rolling API with explicit loop
+- VWAP test had `d if False else df` name error — fixed
+- OU half-life test tightened from absolute assertion to multi-seed statistical assertion
+- `ou_half_life` crashes gracefully to `NaN` when `statsmodels` not installed
 
 ---
 
 ### Sub-Task 4 — ML/DL Model Layer
 
-**Status:** `[ ] pending`
+**Status:** `[x] complete`
 
-**Intent**
-Define, train, and serialize the machine learning models that generate trading signals. Models range from classical statistical models to deep learning architectures, each suited to a different strategy family.
+**What was built**
 
-**Expected Outcomes**
-- A `BaseSignalModel` interface implemented by all models: `train()`, `predict()`, `save()`, `load()`.
-- Five model types covering the full spectrum from interpretable to expressive:
-  - **LSTM price forecaster** — sequence model for short-term return prediction.
-  - **Transformer-based signal model** — attention over feature time series.
-  - **Gaussian Process** — uncertainty-aware predictions for risk-proportional sizing.
-  - **Gradient Boosting (XGBoost/LightGBM)** — fast, interpretable baseline for tabular features.
-  - **Reinforcement Learning agent (PPO)** — models adaptive execution and market-making, Jane Street style.
-- An ensemble layer that combines all model outputs.
-- All models output a signal in `[-1, 1]` plus a confidence/uncertainty score.
+| File | Architecture / Notes |
+|---|---|
+| `models/base.py` | `BaseSignalModel` ABC + `SignalOutput` dataclass (signal ∈ [-1,1], confidence ∈ [0,1], metadata dict) |
+| `models/lstm_forecaster.py` | Bidirectional 2-layer LSTM, LayerNorm, AdamW, ReduceLROnPlateau, early stopping |
+| `models/transformer_signal.py` | Transformer encoder with learnable CLS token + learnable positional encoding, Pre-LN, cosine LR annealing |
+| `models/gaussian_process.py` | GPyTorch ExactGP, RBF × Scale kernel, type-II MLE, confidence = 1/(1+σ²) |
+| `models/gradient_boosting.py` | LightGBM regressor, early stopping, SHAP TreeExplainer, top-10 SHAP values in metadata |
+| `models/rl_agent.py` | PPO (stable-baselines3), `TradingEnv` Gymnasium wrapper (7 discrete actions, Sharpe-like reward, inventory tracking), scaffolded for BacktestEngine swap in Sub-Task 6 |
+| `models/ensemble.py` | Ridge regression meta-learner, StandardScaler, softmax-weighted confidence blending, per-model attribution in metadata |
+| `models/registry.py` | Versioned artifact registry, JSON index, `load_latest`, `load_tagged`, `best_version`, `tag_version` |
+| `models/training/walk_forward.py` | `WalkForwardCV` (expanding + rolling), `evaluate_signals` (RMSE, Sharpe, max drawdown, direction accuracy, confidence-weighted Sharpe), `train_model_walk_forward` |
 
-**Todo List**
-1. Set up `models/base.py` — `BaseSignalModel` abstract class with `train(X, y)`, `predict(X) -> SignalOutput`, `save(path)`, `load(path)`. Define `SignalOutput` dataclass: `signal: float`, `confidence: float`, `model_id: str`, `timestamp`.
-2. Implement `models/lstm_forecaster.py` — PyTorch LSTM over a sliding window of feature vectors predicting next-period return. Include dropout, batch normalization, and a training loop with early stopping and learning rate scheduling.
-3. Implement `models/transformer_signal.py` — small Transformer encoder over time-series feature sequences. Use learnable positional encoding. Output is a scalar signal via a linear projection head.
-4. Implement `models/gaussian_process.py` — `gpytorch` GP regression over the feature space. Outputs mean + variance; variance is mapped to `confidence = 1 / (1 + variance)`.
-5. Implement `models/gradient_boosting.py` — `LightGBM` regressor trained on the same feature matrix. Produces SHAP values alongside predictions for interpretability.
-6. Implement `models/rl_agent.py` — PPO agent via `stable-baselines3`. State = feature vector + current position + unrealized PnL. Actions = `{strong_buy, buy, hold, sell, strong_sell, post_bid, post_ask}`. Reward = risk-adjusted PnL increment (Sharpe-like). Custom `gym.Env` wrapper around the backtesting engine.
-7. Implement `models/ensemble.py` — meta-learner (ridge regression) trained on validation-period model outputs, producing a final blended signal and confidence.
-8. Add `models/training/` — Python scripts and Jupyter notebooks for training each model: data loading, train/validation/test splits using walk-forward cross-validation (no random splits — time-series aware).
-9. Add `models/registry.py` — a `ModelRegistry` that saves model artifacts (weights + metadata) to `models/artifacts/` and exposes `load_latest(model_id)`.
+**Test coverage:** 56 model tests across 4 files — all passing.
 
-**Relevant Context**
-- Walk-forward cross-validation is mandatory for time-series data — never use `train_test_split` with `shuffle=True` as this creates future leakage.
-- LightGBM with SHAP is the "glass box" counterpart to the neural models — it tells you *which features drove this prediction*, which is critical for debugging and understanding the strategy.
-- The PPO agent's custom `gym.Env` wraps the `BacktestEngine` from Sub-Task 6 — the RL training loop literally simulates the agent trading against historical data.
-- Use PyTorch throughout for consistency across LSTM, Transformer, and GP models.
+**macOS OpenMP note:** LightGBM (`libomp.dylib`) conflicts with PyTorch's bundled OpenMP on macOS arm64. Tests are split across two invocations — run with `make test-models` or:
+```bash
+pytest tests/models/test_gradient_boosting.py tests/models/test_base.py   # LightGBM (no torch)
+pytest tests/models/test_models.py tests/models/test_walk_forward.py       # PyTorch/GP/Ensemble
+```
+`libomp` must be installed via `brew install libomp` on macOS.
 
 ---
 
 ### Sub-Task 5 — Strategy Engine
 
-**Status:** `[ ] pending`
+**Status:** `[x] complete`
 
-**Intent**
-Translate model signals into concrete trading decisions. Each strategy is a self-contained module that subscribes to the data pipeline, calls the relevant model(s), and emits `Order` objects. The strategy engine manages all strategies running simultaneously and aggregates their signals through a portfolio-level orchestrator.
+**What was built**
 
-**Expected Outcomes**
-- A `BaseStrategy` class that all strategies extend.
-- Six concrete strategy implementations covering the major quantitative trading paradigms.
-- A `StrategyOrchestrator` that aggregates signals, applies portfolio-level weighting, and enforces risk constraints before passing orders to execution.
+| File | Strategy / Role |
+|---|---|
+| `strategies/base.py` | `BaseStrategy` ABC, `Order` dataclass (validated qty/confidence), `TickerState`, `OrderSide`/`OrderType` enums |
+| `strategies/momentum.py` | LSTM + Transformer ensemble, ADX trend filter (skip if ADX < 20), configurable cooldown, stop-loss/take-profit exits |
+| `strategies/mean_reversion.py` | Bollinger Band z-score entry, ATR dynamic stop-loss, ADX anti-filter (skip if ADX > 25), fallback rolling z-score buffer |
+| `strategies/stat_arb.py` | OLS hedge ratio, OU half-life filter, variance-ratio cointegration proxy, `PairState` container, two-leg simultaneous entry/exit |
+| `strategies/market_making.py` | RL PPO quote adjustment, inventory skew (long inv → tighter ask), ATR-proportional fallback spread, `LIMIT` order posting |
+| `strategies/sentiment.py` | Exponential decay-weighted FinBERT aggregation, baseline z-score normalisation, article count conviction scaling, max-hold force-close |
+| `strategies/macro_factor.py` | RISK_ON/RISK_OFF/CRISIS regime via VIX + yield curve, `get_regime_multiplier()` / `get_equity_multiplier()`, earnings PEAD signal |
+| `strategies/orchestrator.py` | YAML weight normalisation (sum-to-1), regime multiplier from MacroFactorStrategy, same-direction averaging, opposite-direction netting, portfolio position-cap enforcement |
 
-**Strategies Implemented**
+**Test coverage:** 72 strategy tests across 3 files — all passing. Covers entry triggers, exit conditions (stop-loss, z-score reversion, max-hold), direction correctness, ADX filters, disabled mode, weight computation, aggregation (merge/cancel/net), position limits (scale-down, room depletion), regime multipliers.
 
-| Strategy | Signal Source | Paradigm |
-|---|---|---|
-| **Momentum** | LSTM + Transformer ensemble | Trend following |
-| **Mean Reversion** | Bollinger Bands + Z-score | Statistical |
-| **Statistical Arbitrage (Pairs)** | Cointegration spread z-score | Market neutral |
-| **Market Making** | RL agent (PPO) + order book | Liquidity provision |
-| **News Sentiment** | FinBERT aggregated score | Event driven |
-| **Macro Factor** | VIX regime + yield curve + fundamentals | Top-down |
-
-**Todo List**
-1. Define `strategies/base.py` — `BaseStrategy` with `on_bar(bar)`, `on_news(article)`, `on_fundamental(snapshot)`, `generate_orders() -> list[Order]`. Define `Order` dataclass: ticker, side, quantity, order_type, price, strategy_id, confidence.
-2. Implement `strategies/momentum.py` — on each bar, query LSTM + Transformer ensemble. If blended signal > `entry_threshold` and confidence > `min_confidence`, emit directional market order scaled by confidence. Reverse for short. Include configurable cooldown to prevent over-trading.
-3. Implement `strategies/mean_reversion.py` — track rolling z-score of price relative to Bollinger Band midline. When z-score > +2 (overbought), short. When < −2 (oversold), long. Exit at z-score = 0. Use ATR for dynamic stop-loss placement.
-4. Implement `strategies/stat_arb.py` — maintain a cointegrated pair (selected by `features/statistical.py`). Track spread z-score. Enter when |z| > 2, exit when |z| < 0.5. Include half-life filter (only trade pairs whose spread mean-reverts within a tradable timeframe).
-5. Implement `strategies/market_making.py` — use RL agent to determine optimal bid/ask quote offset from mid-price and order sizes. Post both sides of the book simultaneously. Adjust quotes every bar based on current inventory (skew quotes to reduce directional exposure).
-6. Implement `strategies/sentiment.py` — maintain a rolling window of FinBERT sentiment scores per ticker. When score crosses a configurable z-score threshold, emit a signal. Scale position size by article count (more articles = higher conviction). Include a decay function so old articles lose influence.
-7. Implement `strategies/macro_factor.py` — monitor macro regime: when VIX > 25 (fear regime), reduce all strategy allocations by 50% and shift toward mean-reversion. When yield curve inverts, flag recession risk and cut equity exposure. When earnings surprise > 2σ, emit an earnings momentum signal.
-8. Implement `strategies/orchestrator.py` — receives signals from all strategies, applies per-strategy allocation weights from `strategy_config.yaml`, aggregates overlapping signals on the same ticker by averaging, enforces portfolio-level position limits, and emits a de-duplicated final order list.
-9. Add comprehensive inline comments to every strategy explaining the mathematical intuition and real-world context behind each decision rule.
-
-**Relevant Context**
-- The mean reversion strategy is the statistical complement to momentum — together they cover both trending and ranging market regimes.
-- The macro factor strategy acts as a "meta-strategy" that modulates the risk appetite of the whole system. When VIX spikes, position sizes across all strategies shrink.
-- Stat-arb half-life is computed from the Ornstein-Uhlenbeck process fitted to the spread — the half-life tells you how many bars it typically takes for the spread to revert by 50%.
+**Cumulative test count:** 171 tests (non-model), 56 tests (models) = **227 total, 0 failures**.
 
 ---
 
@@ -283,7 +205,8 @@ Build an event-driven backtesting engine that simulates all strategies on histor
 **Relevant Context**
 - Event-driven backtesting prevents look-ahead bias by construction — a strategy only sees data up to the current simulated bar.
 - Model slippage pessimistically: if mid-price is $100.00 and you buy at market, assume a fill at $100.05 (half-spread + market impact).
-- The `BacktestEngine` doubles as the RL agent's training environment (wrapped as a `gym.Env` in Sub-Task 4).
+- The `BacktestEngine` doubles as the RL agent's training environment — once complete, update `models/rl_agent.py`'s `TradingEnv` to wrap `BacktestEngine.step()` instead of its current price-replay stub.
+- The `StrategyOrchestrator.process_bar()` is the correct integration point: call it on each simulated bar and hand its returned `Order` list to the `SimulatedBroker`.
 
 ---
 
@@ -312,6 +235,7 @@ Add a risk management layer between strategies and execution. It enforces positi
 **Relevant Context**
 - CVaR (also called Expected Shortfall) is a better measure than VaR because it tells you not just "what's the worst 1% scenario threshold" but "given you're in the worst 1% of scenarios, how bad is it on average?"
 - Correlation concentration is a subtle but critical risk: holding AAPL and MSFT is not twice the diversification of holding one — they are highly correlated. The risk manager should penalize concentrated bets.
+- The `RiskManager.check_order()` slot sits between `StrategyOrchestrator` output and `ExecutionBroker` input. It receives the post-aggregated, weight-scaled orders from Sub-Task 5.
 
 ---
 
@@ -340,6 +264,7 @@ Build the execution layer with two adapter modes: a paper-trading adapter that s
 **Relevant Context**
 - Alpaca's paper trading environment is indistinguishable from the live API — the same code runs in both modes.
 - The `BrokerFactory` safety assertion on live mode is not paranoia — a misconfigured `.env` that accidentally sets `TRADING_MODE=live` should never silently succeed.
+- The `Order` dataclass from `strategies/base.py` is the input to `ExecutionBroker.submit_order()`. No translation layer needed — the strategy output schema is already execution-ready.
 
 ---
 
@@ -429,7 +354,7 @@ Since this project is also a learning vehicle, add a structured documentation la
 | RL | stable-baselines3 (PPO) | Stable, well-documented, integrates with gym |
 | GP model | GPyTorch | Best Gaussian Process library in PyTorch ecosystem |
 | Gradient boosting | LightGBM + SHAP | Fast tabular model with built-in interpretability |
-| Technical indicators | pandas-ta | Pure Python, no C compiler needed, broad coverage |
+| Technical indicators | Manual implementation (pandas-ta unavailable on arm64) | Pure numpy/pandas, no C compiler issues |
 | API server | FastAPI + Uvicorn | Async, fast, auto-generates OpenAPI docs |
 | Database | SQLite (dev) / PostgreSQL (prod) | SQLAlchemy ORM for portability |
 | Scheduling | APScheduler | Async job scheduling for multi-feed pipelines |
