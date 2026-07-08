@@ -16,15 +16,38 @@ Using ``app.state`` rather than module-level globals makes it easy to swap
 out components in tests — just override ``app.state.monitor`` with a mock
 before the test runs, and all routes that call ``get_monitor()`` will
 receive the mock automatically.
+
+Auth / RBAC
+-----------
+``require_operator`` is a FastAPI dependency that validates the Bearer token
+and checks the required role claim.  It is a *seam*: when ``OIDC_ISSUER_URL``
+is not configured (local dev), the check is skipped entirely.  In production,
+set ``OIDC_ISSUER_URL``, ``OIDC_AUDIENCE``, and ``API_REQUIRED_ROLE`` in the
+environment and the dependency will validate the JWT signature and role.
+
+The implementation uses ``PyJWT`` (already in many FastAPI projects) for
+decode-and-verify.  It does **not** build a full identity platform — it is
+intentionally minimal: verify signature, check expiry, check audience, check
+role claim.
 """
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Bearer token extractor (optional — 401 only when OIDC is configured)
+# ---------------------------------------------------------------------------
+
+_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 # ---------------------------------------------------------------------------
@@ -134,3 +157,135 @@ def get_portfolio(request: Request) -> Any:
             detail="Portfolio not initialised.",
         )
     return state.portfolio
+
+
+# ---------------------------------------------------------------------------
+# Auth / RBAC dependency
+# ---------------------------------------------------------------------------
+
+def require_operator(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+) -> None:
+    """
+    Dependency that enforces operator-role access on mutation endpoints.
+
+    Behaviour
+    ---------
+    * When ``OIDC_ISSUER_URL`` is **not** configured (default in dev), the
+      check is a no-op — the endpoint is accessible without a token.
+    * When ``OIDC_ISSUER_URL`` **is** configured, a valid Bearer JWT is
+      required.  The token is verified against the issuer's JWKS, the
+      audience claim must match ``OIDC_AUDIENCE``, and the decoded payload
+      must contain the role specified by ``API_REQUIRED_ROLE`` in either:
+        - ``claims["roles"]``  (flat list, e.g. Auth0 custom claim)
+        - ``claims["realm_access"]["roles"]``  (Keycloak standard)
+
+    Raises
+    ------
+    HTTP 401  — missing/malformed/expired token when OIDC is configured.
+    HTTP 403  — token valid but required role is absent.
+    """
+    try:
+        from config.settings import settings
+    except Exception:
+        # Settings not loadable (e.g. isolated unit tests); skip auth.
+        return
+
+    if not settings.oidc_issuer_url:
+        # OIDC not configured — dev/local mode, skip validation.
+        return
+
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Bearer token required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = credentials.credentials
+    _validate_token_and_role(
+        token=token,
+        issuer=settings.oidc_issuer_url,
+        audience=settings.oidc_audience,
+        required_role=settings.api_required_role,
+    )
+
+
+def _validate_token_and_role(
+    token: str,
+    issuer: str,
+    audience: str | None,
+    required_role: str,
+) -> None:
+    """
+    Validate a JWT and check the required role claim.
+
+    Uses PyJWT with JWKS fetched from the issuer's well-known endpoint.
+    The JWKS fetch is intentionally synchronous and short-lived; caching
+    is left to the identity provider's HTTP layer.
+
+    Raises HTTPException on any validation failure.
+    """
+    try:
+        import jwt  # PyJWT
+        from jwt import PyJWKClient
+    except ImportError:
+        logger.error(
+            "PyJWT is not installed. "
+            "Install it with: pip install 'PyJWT[cryptography]'"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication service unavailable (PyJWT not installed).",
+        )
+
+    jwks_url = issuer.rstrip("/") + "/.well-known/jwks.json"
+    try:
+        jwks_client = PyJWKClient(jwks_url)
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+    except Exception as exc:
+        logger.warning("JWKS fetch/key resolution failed: %s", exc)
+        raise HTTPException(
+            status_code=401,
+            detail="Token validation failed.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    decode_options: dict = {"require": ["exp", "iss"]}
+    decode_kwargs: dict = {
+        "key": signing_key.key,
+        "algorithms": ["RS256", "ES256"],
+        "issuer": issuer,
+        "options": decode_options,
+    }
+    if audience:
+        decode_kwargs["audience"] = audience
+
+    try:
+        claims: dict = jwt.decode(token, **decode_kwargs)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Token has expired.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.InvalidTokenError as exc:
+        logger.warning("JWT decode failed: %s", exc)
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Role check — support flat "roles" list or Keycloak's realm_access.roles
+    roles: list[str] = []
+    if isinstance(claims.get("roles"), list):
+        roles = claims["roles"]
+    elif isinstance(claims.get("realm_access"), dict):
+        roles = claims["realm_access"].get("roles", [])
+
+    if required_role not in roles:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Role '{required_role}' required.",
+        )

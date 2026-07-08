@@ -30,7 +30,7 @@ Starting the server
 -------------------
 ::
 
-    uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+    uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
 
 or via the Makefile:
 
@@ -41,9 +41,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from typing import AsyncIterator
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -120,10 +120,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # ── StrategyOrchestrator ──────────────────────────────────────────────────
     try:
-        from strategies.orchestrator import StrategyOrchestrator
-        from config.settings import settings as app_settings
-        import yaml
         from pathlib import Path
+
+        import yaml
+
+        from config.settings import settings as app_settings
+        from strategies.orchestrator import StrategyOrchestrator
         config_path = Path(app_settings.strategy_config_path)
         strategy_configs: dict = {}
         if config_path.exists():
@@ -216,7 +218,7 @@ async def health(request: Request) -> HealthResponse:
         trading_mode=state.trading_mode,
         broker_connected=broker_ok,
         uptime_seconds=round(time.time() - state.started_at, 1),
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
     )
 
 

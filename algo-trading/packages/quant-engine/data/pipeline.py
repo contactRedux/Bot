@@ -10,9 +10,24 @@ the database up to date with fresh market data.  It runs two types of jobs:
    mode.
 
 2. **Scheduled polling jobs** — REST feeds that are called on a fixed interval:
-   * Historical bar backfill (daily, at midnight): yfinance + CoinGecko
-   * News (every 15 minutes): NewsAPI + GDELT
+   * Historical bar backfill (daily, at midnight): Bloomberg (if available),
+     then yfinance + CoinGecko as fallback
+   * News (every 15 minutes): Bloomberg (if available), then NewsAPI + GDELT
    * Fundamentals (weekly, on Sundays): Alpha Vantage + SEC EDGAR
+
+Provider-priority policy (Phase 2)
+-----------------------------------
+Bloomberg B-PIPE is tried **first** for covered assets (US equities, daily+
+intervals) when all of the following hold:
+
+1. ``blpapi`` is installed (``BloombergFeed.is_available()`` returns True)
+2. ``settings.bloomberg_app_name`` is set (non-None, non-empty)
+
+If Bloomberg returns data, the free-tier feeds are skipped for that ticker.
+If Bloomberg returns an empty list (not configured, not entitled, network
+issue), the pipeline falls back to yfinance / NewsAPI / GDELT transparently.
+Crypto tickers are always served by CoinGecko / Binance regardless of
+Bloomberg availability (B-PIPE does not cover crypto pairs).
 
 APScheduler integration
 ------------------------
@@ -27,20 +42,22 @@ Job scheduling summary
   | stream_alpaca_bars       | continuous      | paper, live   |
   | stream_binance_bars      | continuous      | paper, live   |
   | stream_binance_orderbook | continuous      | paper, live   |
-  | poll_yfinance            | interval 1h     | all           |
-  | poll_coingecko           | interval 1h     | all           |
-  | poll_newsapi             | interval 15min  | all           |
-  | poll_gdelt               | interval 15min  | all           |
+  | poll_bars                | interval 1h     | all           |
+  | poll_news                | interval 15min  | all           |
   | poll_fundamentals        | cron weekly     | all           |
 
 Configuration
 -------------
 All feed configs are drawn from ``config.settings``:
 
-    settings.alpaca_api_key      → AlpacaFeed
-    settings.binance_api_key     → BinanceFeed
-    settings.newsapi_key         → NewsApiFeed
-    settings.alpha_vantage_key   → AlphaVantageFeed
+    settings.alpaca_api_key        → AlpacaFeed
+    settings.binance_api_key       → BinanceFeed
+    settings.newsapi_key           → NewsApiFeed
+    settings.alpha_vantage_key     → AlphaVantageFeed
+    settings.bloomberg_app_name    → BloombergFeed (optional)
+    settings.bloomberg_host        → BloombergFeed
+    settings.bloomberg_port        → BloombergFeed
+    settings.bloomberg_timeout_seconds → BloombergFeed
 
 Tickers and polling intervals are configured via ``config/strategy_config.yaml``
 or overridden when constructing the DataPipeline.
@@ -66,8 +83,7 @@ Usage
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
-from typing import Callable
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
@@ -128,6 +144,7 @@ class DataPipeline:
         self._running = False
 
         # Lazily initialized feed instances
+        self._bloomberg_feed = None
         self._yfinance_feed = None
         self._alpaca_feed = None
         self._coingecko_feed = None
@@ -371,21 +388,29 @@ class DataPipeline:
         already exists, only the missing gap is fetched (incremental fill).
         """
         logger.info("pipeline.initial_backfill.starting")
-        end = datetime.now(tz=timezone.utc)
+        end = datetime.now(tz=UTC)
         default_start = end - timedelta(days=365)
 
         loop = asyncio.get_event_loop()
 
-        # Equity historical bars (yfinance)
+        # Equity historical bars — Bloomberg first, yfinance as fallback
+        bbg_feed = self._get_bloomberg_feed()
         yf_feed = self._get_yfinance_feed()
         for ticker in self.equity_tickers:
             start = self._get_backfill_start(ticker, self.bar_interval, default_start)
             if start >= end:
                 continue
-            logger.info("pipeline.backfill.equity", ticker=ticker, start=start)
-            bars = await loop.run_in_executor(
-                None, yf_feed.fetch_bars, ticker, self.bar_interval, start, end
-            )
+            bars: list = []
+            if bbg_feed is not None:
+                logger.info("pipeline.backfill.equity.bloomberg", ticker=ticker, start=start)
+                bars = await loop.run_in_executor(
+                    None, bbg_feed.fetch_bars, ticker, self.bar_interval, start, end
+                )
+            if not bars:
+                logger.info("pipeline.backfill.equity.yfinance", ticker=ticker, start=start)
+                bars = await loop.run_in_executor(
+                    None, yf_feed.fetch_bars, ticker, self.bar_interval, start, end
+                )
             inserted = self.store.write_bars(bars)
             logger.info(
                 "pipeline.backfill.equity.done",
@@ -426,19 +451,26 @@ class DataPipeline:
         For intraday bars it fetches the last hour of data for all tickers.
         """
         loop = asyncio.get_event_loop()
-        end = datetime.now(tz=timezone.utc)
+        end = datetime.now(tz=UTC)
         fallback_start = end - timedelta(hours=2)
 
-        # Equity bars
+        # Equity bars — Bloomberg first, yfinance as fallback
+        bbg_feed = self._get_bloomberg_feed()
         yf_feed = self._get_yfinance_feed()
         for ticker in self.equity_tickers:
             start = self._get_backfill_start(ticker, self.bar_interval, fallback_start)
             if start >= end:
                 continue
             try:
-                bars = await loop.run_in_executor(
-                    None, yf_feed.fetch_bars, ticker, self.bar_interval, start, end
-                )
+                bars: list = []
+                if bbg_feed is not None:
+                    bars = await loop.run_in_executor(
+                        None, bbg_feed.fetch_bars, ticker, self.bar_interval, start, end
+                    )
+                if not bars:
+                    bars = await loop.run_in_executor(
+                        None, yf_feed.fetch_bars, ticker, self.bar_interval, start, end
+                    )
                 self.store.write_bars(bars)
             except Exception as exc:
                 logger.error("pipeline.poll_bars.equity_error", ticker=ticker, error=str(exc))
@@ -459,15 +491,42 @@ class DataPipeline:
 
     async def _poll_news(self) -> None:
         """
-        Every-N-minutes job: fetch fresh news from NewsAPI and GDELT.
+        Every-N-minutes job: fetch fresh news.
 
-        Both sources are polled.  GDELT provides broader macro news coverage;
-        NewsAPI provides more targeted company-specific articles.
+        Provider priority:
+        1. Bloomberg (if available and configured) — highest-quality sourcing
+        2. NewsAPI — targeted company-specific articles
+        3. GDELT   — broad macro news coverage (always available, no key needed)
+
+        Bloomberg and the free-tier feeds are not mutually exclusive — all
+        available sources are polled so the DataStore receives the broadest
+        coverage.  Duplicate articles are deduplicated by ``article_id`` in the
+        DataStore via ``INSERT OR IGNORE``.
         """
         loop = asyncio.get_event_loop()
         all_tickers = self.equity_tickers + [t.split("-")[0] for t in self.crypto_tickers]
-        end = datetime.now(tz=timezone.utc)
+        end = datetime.now(tz=UTC)
         start = end - timedelta(minutes=self.news_poll_minutes * 2)  # overlap window
+
+        # Bloomberg news (first priority — only equity tickers are covered)
+        bbg_feed = self._get_bloomberg_feed()
+        if bbg_feed is not None:
+            try:
+                articles = await loop.run_in_executor(
+                    None,
+                    lambda: bbg_feed.fetch_news(
+                        tickers=self.equity_tickers, start=start, end=end,
+                        max_results=100,
+                    ),
+                )
+                inserted = self.store.write_news(articles)
+                logger.info(
+                    "pipeline.poll_news.bloomberg",
+                    fetched=len(articles),
+                    inserted=inserted,
+                )
+            except Exception as exc:
+                logger.error("pipeline.poll_news.bloomberg_error", error=str(exc))
 
         # NewsAPI
         if settings.newsapi_key:
@@ -564,6 +623,33 @@ class DataPipeline:
 
     # ── Feed factory helpers ──────────────────────────────────────────────────
 
+    def _get_bloomberg_feed(self):
+        """
+        Return a BloombergFeed instance when Bloomberg is available and
+        configured, or ``None`` to signal the caller to use free-tier sources.
+        """
+        if self._bloomberg_feed is not None:
+            return self._bloomberg_feed
+
+        # Avoid importing if blpapi is not installed
+        from data.feeds.bloomberg_feed import BloombergFeed
+
+        if not BloombergFeed.is_available():
+            logger.debug("bloomberg.unavailable.no_blpapi")
+            return None
+
+        if not settings.bloomberg_app_name:
+            logger.debug("bloomberg.unavailable.no_app_name")
+            return None
+
+        self._bloomberg_feed = BloombergFeed(config={
+            "host": settings.bloomberg_host,
+            "port": settings.bloomberg_port,
+            "app_name": settings.bloomberg_app_name,
+            "timeout_seconds": settings.bloomberg_timeout_seconds,
+        })
+        return self._bloomberg_feed
+
     def _get_yfinance_feed(self):
         if self._yfinance_feed is None:
             from data.feeds.yfinance_feed import YFinanceFeed
@@ -651,7 +737,7 @@ class DataPipeline:
             "1mo": timedelta(days=30),
         }
         offset = interval_offsets.get(interval, timedelta(days=1))
-        return latest.replace(tzinfo=timezone.utc) + offset
+        return latest.replace(tzinfo=UTC) + offset
 
     # ── Public accessors ──────────────────────────────────────────────────────
 

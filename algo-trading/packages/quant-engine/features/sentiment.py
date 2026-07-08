@@ -66,7 +66,7 @@ reads pre-computed scores rather than running inference at each bar.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
@@ -227,6 +227,23 @@ def score_articles_batch(texts: list[str], batch_size: int = 32) -> list[float]:
 
 # ── Aggregation ───────────────────────────────────────────────────────────────
 
+# ── Source quality weights ────────────────────────────────────────────────────
+
+# Bloomberg news is from a curated institutional feed and therefore given a
+# higher base weight than free-tier sources.  The multiplier is applied to the
+# per-article weight *before* normalisation, so Bloomberg articles contribute
+# proportionally more to the aggregated signal when both sources are present.
+#
+# Rationale: Bloomberg articles are typically more precise, less duplicated,
+# and closer to the primary information event than re-syndicated free feeds.
+_SOURCE_QUALITY_WEIGHTS: dict[str, float] = {
+    "bloomberg": 2.0,  # institutional — higher quality
+    "newsapi": 1.0,    # standard
+    "gdelt": 0.8,      # aggregated/re-syndicated — slightly lower quality
+}
+_DEFAULT_SOURCE_QUALITY_WEIGHT = 1.0
+
+
 def aggregate_sentiment(
     articles: list[NewsArticle],
     ticker: str,
@@ -240,6 +257,19 @@ def aggregate_sentiment(
     Filters articles associated with ``ticker`` published within
     ``window_hours`` before ``as_of``, applies exponential decay weighting,
     and returns summary statistics.
+
+    Source quality weighting
+    ------------------------
+    Bloomberg articles receive a 2× quality multiplier relative to free-tier
+    sources (NewsAPI = 1×, GDELT = 0.8×).  This multiplier is applied on top
+    of the exponential time-decay weight before normalisation, so a Bloomberg
+    article from 3 hours ago outweighs a NewsAPI article of the same age.
+    The effective weight for each article is:
+
+        w_i = quality(source_i) × exp(−λ × hours_ago_i)
+
+    All weights are then normalised to sum to 1 before computing the
+    decay-weighted score.
 
     Parameters
     ----------
@@ -279,10 +309,10 @@ def aggregate_sentiment(
         return _default
 
     # Filter to ticker and time window
-    cutoff = as_of.replace(tzinfo=timezone.utc) if as_of.tzinfo is None else as_of
+    cutoff = as_of.replace(tzinfo=UTC) if as_of.tzinfo is None else as_of
     cutoff_start = cutoff.timestamp() - window_hours * 3600
 
-    relevant: list[tuple[float, float]] = []  # (hours_ago, score)
+    relevant: list[tuple[float, float, float]] = []  # (hours_ago, score, quality_w)
     for a in articles:
         if ticker not in a.tickers:
             continue
@@ -290,7 +320,7 @@ def aggregate_sentiment(
             continue
         ts = a.event_timestamp
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
         if ts >= cutoff:
             continue  # future article — skip (look-ahead guard)
         article_ts = ts.timestamp()
@@ -298,17 +328,19 @@ def aggregate_sentiment(
             continue  # outside window
 
         hours_ago = (cutoff.timestamp() - article_ts) / 3600
-        relevant.append((hours_ago, a.sentiment_score))
+        quality_w = _SOURCE_QUALITY_WEIGHTS.get(a.source, _DEFAULT_SOURCE_QUALITY_WEIGHT)
+        relevant.append((hours_ago, a.sentiment_score, quality_w))
 
     if not relevant:
         return _default
 
     hours_arr = np.array([r[0] for r in relevant])
     scores_arr = np.array([r[1] for r in relevant])
+    quality_arr = np.array([r[2] for r in relevant])
 
-    # Exponential decay weights: w = exp(−λ × hours_ago)
+    # Exponential decay weights × source quality multiplier
     lam = math.log(2) / decay_half_life_hours
-    weights = np.exp(-lam * hours_arr)
+    weights = quality_arr * np.exp(-lam * hours_arr)
     weights /= weights.sum()  # normalize
 
     decay_weighted_score = float(np.dot(weights, scores_arr))

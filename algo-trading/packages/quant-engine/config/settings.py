@@ -19,16 +19,15 @@ Usage
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # ── Enums ────────────────────────────────────────────────────────────────────
 
-class TradingMode(str, Enum):
+class TradingMode(StrEnum):
     DEV = "dev"
     PAPER = "paper"
     LIVE = "live"
@@ -123,10 +122,68 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── Bloomberg B-PIPE ──────────────────────────────────────────────────────
+    bloomberg_host: str = Field(
+        default="localhost",
+        description=(
+            "Hostname or IP of the Bloomberg B-PIPE / Desktop API server. "
+            "Only used when blpapi is installed and BLOOMBERG_APP_NAME is set."
+        ),
+    )
+    bloomberg_port: int = Field(
+        default=8194,
+        description="Port number of the Bloomberg B-PIPE server (default: 8194).",
+    )
+    bloomberg_app_name: str | None = Field(
+        default=None,
+        description=(
+            "Bloomberg application name registered for B-PIPE access. "
+            "When None, the Bloomberg feed is disabled at startup."
+        ),
+    )
+    bloomberg_timeout_seconds: int = Field(
+        default=30,
+        description="Timeout in seconds for Bloomberg API requests (default: 30).",
+    )
+
     # ── Feature pipeline ─────────────────────────────────────────────────────
     strategy_config_path: str = Field(
         default=str(Path(__file__).parent / "strategy_config.yaml"),
         description="Path to the YAML file containing per-strategy parameters",
+    )
+
+    # ── Auth / OIDC ───────────────────────────────────────────────────────────
+    oidc_issuer_url: str | None = Field(
+        default=None,
+        description=(
+            "OIDC issuer URL used to validate Bearer tokens "
+            "(e.g. https://accounts.google.com or your Keycloak realm URL). "
+            "When None, token validation is skipped (dev mode only)."
+        ),
+    )
+    oidc_audience: str | None = Field(
+        default=None,
+        description=(
+            "Expected 'aud' claim in the JWT. "
+            "Must match the value configured in your identity provider."
+        ),
+    )
+    api_required_role: str = Field(
+        default="operator",
+        description=(
+            "Role claim value required to call mutation/control-plane endpoints. "
+            "The role is expected in the 'roles' or 'realm_access.roles' JWT claim."
+        ),
+    )
+
+    # ── AWS Secrets Manager ───────────────────────────────────────────────────
+    aws_secrets_prefix: str = Field(
+        default="algo-trading",
+        description=(
+            "Prefix for AWS Secrets Manager secret names. "
+            "When AWS_SECRETS_PREFIX is set, the secrets manager integration "
+            "seam can resolve '<prefix>/<key>' paths at runtime."
+        ),
     )
 
     # ── Logging ───────────────────────────────────────────────────────────────

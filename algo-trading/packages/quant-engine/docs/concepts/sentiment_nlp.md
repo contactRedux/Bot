@@ -149,11 +149,11 @@ signal = raw_sentiment * conviction_multiplier
 ```
 NewsAPI / GDELT / Bloomberg News
         ↓  (data/feeds/)
-  NewsArticle objects (headline + body + published_at)
+  NewsArticle objects (headline + body + published_at + source)
         ↓
   features/sentiment.py
     → FinBERT scores each article
-    → Exponential decay aggregation per ticker
+    → Exponential decay × source quality aggregation per ticker
     → Returns per-ticker sentiment time-series
         ↓
   strategies/sentiment.py
@@ -162,6 +162,22 @@ NewsAPI / GDELT / Bloomberg News
     → Long if z > entry_threshold, Short if z < -entry_threshold
     → Force-close after max_hold_bars
 ```
+
+**Source quality weighting:** When Bloomberg B-PIPE is active alongside free-tier feeds, the aggregation applies a per-source quality multiplier before normalisation. The effective weight for each article is:
+
+```
+w_i = quality(source_i) × exp(−λ × hours_ago_i)
+```
+
+Source quality multipliers (defined in `features/sentiment.py`):
+
+| Source | Multiplier | Rationale |
+|--------|-----------|-----------|
+| bloomberg | 2.0 | Curated institutional feed; primary information event proximity |
+| newsapi | 1.0 | Standard — well-sourced but re-syndicated |
+| gdelt | 0.8 | Aggregated web scrape — highest duplication risk |
+
+When Bloomberg is absent (not installed or not configured), the quality multipliers for the present free-tier sources still apply, so the aggregation logic is consistent regardless of which feeds are active.
 
 **Latency note:** FinBERT inference takes ~50ms per article on CPU. In production (AWS ECS with GPU), batch-score all new articles every minute. For backtesting, pre-compute and cache scores to avoid re-running inference on the same articles.
 

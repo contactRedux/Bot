@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from api.deps import AppState, get_app_state
+from api.deps import AppState, get_app_state, require_operator
 from api.schemas import (
     StrategiesResponse,
     StrategyInfo,
@@ -111,7 +111,9 @@ async def get_strategy(
 async def toggle_strategy(
     strategy_id: str,
     body: StrategyToggleRequest,
+    request: Request,
     state: AppState = Depends(get_app_state),
+    _: None = Depends(require_operator),
 ) -> StrategyToggleResponse:
     """
     Enable or disable a strategy at runtime.
@@ -128,7 +130,13 @@ async def toggle_strategy(
 
     strat._enabled = body.enabled
     action = "enabled" if body.enabled else "disabled"
-    logger.info("Strategy %s %s via API", strategy_id, action)
+    logger.warning(
+        "AUDIT strategy_toggle action=%s strategy_id=%s trading_mode=%s client=%s",
+        action,
+        strategy_id,
+        state.trading_mode,
+        request.client.host if request.client else "unknown",
+    )
     return StrategyToggleResponse(
         strategy_id=strategy_id,
         enabled=body.enabled,

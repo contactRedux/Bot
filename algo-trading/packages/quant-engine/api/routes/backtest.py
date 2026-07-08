@@ -37,12 +37,12 @@ from __future__ import annotations
 import logging
 import traceback
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
-from api.deps import AppState, get_app_state
+from api.deps import AppState, get_app_state, require_operator
 from api.schemas import (
     BacktestRequest,
     BacktestResponse,
@@ -69,24 +69,15 @@ def _run_backtest_sync(
     Uses yfinance to download historical bars in dev mode so the endpoint
     works without a live data feed or database.
     """
-    import numpy as np
-    from datetime import datetime, timezone
-
     # -- Try to use the real BacktestEngine if possible ----------------------
     try:
         from backtesting.engine import BacktestEngine
-        from backtesting.broker import SimulatedBroker
-        from backtesting.portfolio import Portfolio
         from strategies.orchestrator import StrategyOrchestrator
-
-        start_dt = datetime.strptime(req.start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        end_dt = datetime.strptime(req.end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
 
         # Build per-ticker bar dicts from yfinance (silent fallback on error)
         bars: dict[str, Any] = {}
         try:
             import yfinance as yf
-            import pandas as pd
             for ticker in req.tickers:
                 raw = yf.download(
                     ticker,
@@ -106,9 +97,11 @@ def _run_backtest_sync(
             bars = _synthetic_bars(req.tickers, req.start_date, req.end_date)
 
         # Build a minimal orchestrator
-        from config.settings import settings as app_settings
-        import yaml
         from pathlib import Path
+
+        import yaml
+
+        from config.settings import settings as app_settings
 
         config_path = Path(app_settings.strategy_config_path)
         strategy_configs: dict[str, Any] = {}
@@ -173,7 +166,7 @@ def _run_backtest_sync(
             bar_interval=req.interval,
             halted=False,
             halt_reason="",
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(datetime.UTC).isoformat(),
             error=str(exc),
         ).model_dump()
 
@@ -249,7 +242,9 @@ def _background_run(
 async def run_backtest(
     body: BacktestRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     state: AppState = Depends(get_app_state),
+    _: None = Depends(require_operator),
 ) -> BacktestStatusResponse:
     """
     Trigger a new backtest run.
@@ -259,6 +254,17 @@ async def run_backtest(
     then fetch full results from ``GET /api/backtest/{run_id}``.
     """
     run_id = str(uuid.uuid4())[:12]
+    logger.warning(
+        "AUDIT backtest_run action=launch run_id=%s tickers=%s strategies=%s "
+        "start=%s end=%s trading_mode=%s client=%s",
+        run_id,
+        body.tickers,
+        body.strategies,
+        body.start_date,
+        body.end_date,
+        state.trading_mode,
+        request.client.host if request.client else "unknown",
+    )
     background_tasks.add_task(_background_run, body, run_id, state)
     return BacktestStatusResponse(
         run_id=run_id,
@@ -329,8 +335,16 @@ async def get_backtest_result(
 @router.delete("/{run_id}", status_code=204)
 async def delete_backtest(
     run_id: str,
+    request: Request,
     state: AppState = Depends(get_app_state),
+    _: None = Depends(require_operator),
 ) -> None:
     """Remove a completed backtest run from the cache."""
+    logger.warning(
+        "AUDIT backtest_delete action=delete run_id=%s trading_mode=%s client=%s",
+        run_id,
+        state.trading_mode,
+        request.client.host if request.client else "unknown",
+    )
     state.backtest_results.pop(run_id, None)
     state.backtest_status.pop(run_id, None)

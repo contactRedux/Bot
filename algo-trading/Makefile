@@ -18,8 +18,8 @@
 QE := packages/quant-engine
 DASH := packages/dashboard
 
-# Python interpreter (uses the venv if present)
-PYTHON := $(shell command -v python3 2>/dev/null || echo python)
+# Python interpreter — prefer python3.11 (project requirement), fall back to python3/python
+PYTHON := $(shell command -v python3.11 2>/dev/null || command -v python3 2>/dev/null || echo python)
 PIP    := $(PYTHON) -m pip
 
 # ── Installation ──────────────────────────────────────────────────────────────
@@ -41,8 +41,8 @@ dev:
 	$(MAKE) api & $(MAKE) dashboard
 
 api:
-	@echo "→ Starting FastAPI server on http://localhost:8000 ..."
-	cd $(QE) && $(PYTHON) -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+	@echo "→ Starting FastAPI server on http://127.0.0.1:8000 ..."
+	cd $(QE) && $(PYTHON) -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
 
 dashboard:
 	@echo "→ Starting Vite dashboard on http://localhost:5173 ..."

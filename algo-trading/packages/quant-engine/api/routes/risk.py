@@ -21,12 +21,11 @@ GET  /api/risk/limits
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from api.deps import AppState, get_app_state
+from api.deps import AppState, get_app_state, require_operator
 from api.schemas import (
     ResumeRequest,
     ResumeResponse,
@@ -121,8 +120,10 @@ async def get_risk_status(
 
 @router.post("/resume", response_model=ResumeResponse)
 async def resume_trading(
+    request: Request,
     body: ResumeRequest,
     state: AppState = Depends(get_app_state),
+    _: None = Depends(require_operator),
 ) -> ResumeResponse:
     """
     Manually clear a trading halt.
@@ -142,7 +143,10 @@ async def resume_trading(
 
     monitor.reset_halt(new_equity=body.new_equity)
     logger.warning(
-        "Trading halt CLEARED via API (new_equity=%s)", body.new_equity
+        "AUDIT risk_resume action=resume new_equity=%s trading_mode=%s client=%s",
+        body.new_equity,
+        state.trading_mode,
+        request.client.host if request.client else "unknown",
     )
     return ResumeResponse(
         success=True,

@@ -55,6 +55,14 @@ data = [
     "lxml>=5.2",
 ]
 
+# ── Bloomberg B-PIPE (optional institutional data) ────────────────────────────
+# blpapi must be installed separately — it is not available on PyPI.
+# Download from: https://www.bloomberg.com/professional/support/api-library/
+# or install via: pip install --index-url=https://bcms.bloomberg.com/pip/simple/ blpapi
+bloomberg = [
+    "blpapi>=3.19",
+]
+
 # ── Machine learning ─────────────────────────────────────────────────────────
 ml = [
     "torch>=2.3",

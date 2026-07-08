@@ -37,6 +37,7 @@ The purpose of this project is to provide a single platform where quant research
 - Execution layer for paper trading plus Alpaca and Binance brokerage adapters
 - FastAPI REST API and WebSocket feed for dashboard and operator workflows
 - Structured configuration via pydantic settings and strategy YAML
+- Localhost-only API binding by default (`127.0.0.1`); OIDC Bearer auth seam for production
 
 ### Frontend (`packages/dashboard`)
 
@@ -142,9 +143,15 @@ This runs `pip install -e ".[data,ml,api,dev]"` in the quant-engine venv and `np
 
 ```bash
 make api
-# → FastAPI server at http://localhost:8000
-# → Swagger docs at http://localhost:8000/docs
+# → FastAPI server at http://127.0.0.1:8000  (localhost only — not exposed on LAN)
+# → Swagger docs at http://127.0.0.1:8000/docs
 ```
+
+> **Security note:** The API binds to `127.0.0.1` (loopback only) by default.
+> Never use `--host 0.0.0.0` in development — it exposes the unauthenticated
+> control-plane endpoints on all network interfaces.  In production, place the
+> API behind a reverse proxy (AWS ALB/nginx) and set `OIDC_ISSUER_URL` to
+> require Bearer token authentication on mutation endpoints.
 
 ### 4. Start the dashboard
 
@@ -282,6 +289,10 @@ All variables are documented in [`.env.example`](.env.example). Key variables:
 | `AWS_REGION` | Cloud deployment | AWS region |
 | `AWS_ACCOUNT_ID` | Cloud deployment | AWS account |
 | `S3_BUCKET_NAME` | Model/report storage | S3 bucket |
+| `OIDC_ISSUER_URL` | Production auth | OIDC issuer URL for JWT validation |
+| `OIDC_AUDIENCE` | Production auth | Expected JWT audience claim |
+| `API_REQUIRED_ROLE` | Production auth | Role required for control-plane endpoints (default: `operator`) |
+| `AWS_SECRETS_PREFIX` | Cloud deployment | Prefix for AWS Secrets Manager secret names |
 | `VITE_API_BASE_URL` | Dashboard | Backend API URL |
 | `VITE_WS_URL` | Dashboard | WebSocket feed URL |
 
