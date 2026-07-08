@@ -9,19 +9,6 @@ description = "Algorithmic trading platform — ML/quant engine"
 readme = "README.md"
 requires-python = ">=3.11"
 
-[tool.hatch.build.targets.wheel]
-packages = [
-    "config",
-    "data",
-    "features",
-    "models",
-    "strategies",
-    "backtesting",
-    "risk",
-    "execution",
-    "api",
-]
-
 # ── Core runtime dependencies ────────────────────────────────────────────────
 dependencies = [
     "pandas>=2.2",
@@ -38,6 +25,19 @@ dependencies = [
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
     "aiofiles>=23.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "config",
+    "data",
+    "features",
+    "models",
+    "strategies",
+    "backtesting",
+    "risk",
+    "execution",
+    "api",
 ]
 
 [project.optional-dependencies]

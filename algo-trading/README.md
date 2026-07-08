@@ -1,6 +1,68 @@
 # Algorithmic Trading Platform
 
-A full-stack algorithmic trading platform covering US equities and crypto, built as a Python/TypeScript monorepo. Implements six strategy families — momentum, mean reversion, statistical arbitrage, market making, news sentiment, and macro factor — plus backtesting, risk management, a FastAPI server, and a React terminal dashboard.
+A full-stack algorithmic AI trading platform for US equities and crypto, built as a Python/TypeScript monorepo. The project combines market data ingestion, feature engineering, machine learning, strategy orchestration, risk controls, backtesting, paper/live execution, and a real-time dashboard in one research-to-execution stack.
+
+## Purpose
+
+The purpose of this project is to provide a single platform where quant research, model development, strategy evaluation, risk control, and operator visibility all live in the same system. Instead of splitting research notebooks, broker scripts, dashboards, and risk checks across disconnected tools, this codebase aims to provide one coherent trading platform that can evolve toward a high-grade algorithmic AI trading bot.
+
+## Problems This Project Solves
+
+- Reduces fragmentation between research, execution, and monitoring workflows
+- Standardizes market data ingestion across multiple providers and asset classes
+- Converts raw market, news, and macro inputs into a reusable feature pipeline
+- Makes strategy comparison easier through a shared backtesting and walk-forward framework
+- Applies centralized risk controls before orders reach execution
+- Supports safe progression from development to paper trading to live trading
+- Gives operators a dashboard for signals, risk, portfolio state, and execution visibility
+- Creates a path for institutional upgrades such as Bloomberg integration, cloud deployment, stronger auth, and reproducible infrastructure
+
+## Current Platform Capabilities
+
+### Backend (`packages/quant-engine`)
+
+- Multi-source data layer with feeds for Alpaca, Binance, CoinGecko, yfinance, NewsAPI, GDELT, Alpha Vantage, and SEC EDGAR
+- Bloomberg wiring documented and environment-ready, with full B-PIPE implementation planned next
+- Feature pipeline with 40+ technical indicators plus sentiment, macro, and statistical features
+- ML stack including LSTM, Transformer, Gaussian Process, LightGBM, PPO RL, and ensemble models
+- Six implemented strategy families:
+  - momentum
+  - mean reversion
+  - statistical arbitrage
+  - market making
+  - sentiment/news
+  - macro factor
+- Event-driven backtester with metrics, reporting, and walk-forward model validation
+- Risk engine covering VaR, CVaR, drawdown monitoring, daily loss controls, and correlation-aware scaling
+- Execution layer for paper trading plus Alpaca and Binance brokerage adapters
+- FastAPI REST API and WebSocket feed for dashboard and operator workflows
+- Structured configuration via pydantic settings and strategy YAML
+
+### Frontend (`packages/dashboard`)
+
+- React + TypeScript dashboard with pages for overview, backtest exploration, live monitoring, news, and risk
+- Zustand stores for signals, portfolio, fills, risk state, and WebSocket status
+- Auto-reconnect WebSocket hook for real-time updates
+- Recharts-based visualizations for portfolio and market/operator views
+- Typed API client and strict TypeScript configuration
+
+### Quality and testing
+
+- Extensive automated backend coverage across API, backtesting, execution, features, models, risk, and strategies
+- Dashboard lint/build validation in place
+- Current validated state includes passing backend test suites and successful frontend lint/build checks
+
+## Planned Additions
+
+The next roadmap is focused on moving the platform from a strong research/paper-trading stack toward a more institutional-grade system:
+
+- Bloomberg B-PIPE full implementation
+- AWS Terraform-based infrastructure baseline
+- Price chart REST OHLC wiring for the dashboard
+- Integration and E2E test coverage
+- Incremental hardening toward `mypy --strict`
+- Execution realism improvements such as partial fills, queue awareness, and microstructure features
+- Security/runtime upgrades including localhost-safe defaults, authentication, RBAC, secret management, and auditability
 
 ---
 
