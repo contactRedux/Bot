@@ -30,12 +30,29 @@ Custom Gym Environment
              5=post_bid, 6=post_ask
     Reward: risk-adjusted PnL increment (Sharpe-like: ΔPnL / rolling_vol)
 
-Note on BacktestEngine integration
-------------------------------------
-This module uses a simple ``TradingEnv`` with a price-replay loop.  When
-Sub-Task 6 (backtesting engine) is complete, ``TradingEnv`` can be swapped
-for the real engine by replacing ``_step_simulation()`` with a call to
-``BacktestEngine.step()``.  The PPO agent's interface does not change.
+BacktestEngine integration
+---------------------------
+``TradingEnv`` supports two simulation modes controlled by the ``use_engine``
+constructor parameter:
+
+* **Price-replay mode** (``use_engine=False``, default) — the original
+  lightweight environment that replays a NumPy price array.  Fast for
+  prototyping and large-scale hyperparameter sweeps.
+
+* **Engine mode** (``use_engine=True``) — wraps a ``BacktestEngine``
+  instance and drives it step-by-step.  This gives the RL agent access to
+  the full strategy/broker/portfolio pipeline with realistic slippage,
+  commission, and portfolio accounting.  The observation vector is
+  augmented with ``[equity_ratio, cash_ratio, unrealised_pnl_norm]``
+  from the engine.
+
+To switch to engine mode::
+
+    from backtesting.engine import BacktestEngine
+
+    engine = BacktestEngine(bars=bars_dict, orchestrator=orchestrator)
+    env = TradingEnv(prices=prices, features=features,
+                     use_engine=True, backtest_engine=engine)
 
 Usage
 -----
@@ -116,16 +133,26 @@ N_ACTIONS = len(ACTIONS)
 if _GYM_AVAILABLE:
     class TradingEnv(gym.Env):
         """
-        Simple price-replay Gymnasium environment for PPO training.
+        Gymnasium environment for PPO training.
 
-        The environment replays a historical price series bar by bar.
-        At each step the agent receives a feature vector + position state
-        and selects an action.
+        Supports two simulation modes:
+
+        * **Price-replay mode** (``use_engine=False``, default): replays a
+          NumPy price array bar by bar.  Fast; ideal for large hyperparameter
+          sweeps.
+
+        * **Engine mode** (``use_engine=True``): drives a ``BacktestEngine``
+          step-by-step so the RL agent trains inside the full
+          strategy/broker/portfolio pipeline with realistic slippage,
+          commission, and portfolio accounting.
 
         State space
         -----------
         A flat vector of (feature_dim + 3) floats:
-            [feature_0, ..., feature_N, position, unrealized_pnl_norm, cash_ratio]
+            [feature_0, ..., feature_N, position_norm, unrealised_pnl_norm, cash_ratio]
+
+        In engine mode, position_norm, unrealised_pnl_norm, and cash_ratio come
+        from the Portfolio instead of the simplified internal bookkeeping.
 
         Action space
         -----------
@@ -137,11 +164,6 @@ if _GYM_AVAILABLE:
 
             reward = ΔPnL / (rolling_vol + ε) - λ * |ΔPosition|
 
-        where:
-          - ΔPnL is the step PnL from holding position × price change
-          - rolling_vol is a 20-step rolling std of returns (risk normalization)
-          - λ * |ΔPosition| is a transaction cost penalty
-
         Parameters
         ----------
         prices : np.ndarray
@@ -151,11 +173,15 @@ if _GYM_AVAILABLE:
         initial_cash : float
             Starting capital.
         transaction_cost : float
-            Proportional cost per trade (e.g. 0.001 = 10 bps).
+            Proportional cost per trade (price-replay mode only).
         max_position : float
             Maximum position size as fraction of capital.
         reward_vol_window : int
             Window for rolling volatility normalization.
+        use_engine : bool
+            If True, use a ``BacktestEngine`` for simulation.
+        backtest_engine : BacktestEngine, optional
+            Pre-configured engine instance (required when ``use_engine=True``).
         """
 
         metadata = {"render_modes": []}
@@ -168,6 +194,8 @@ if _GYM_AVAILABLE:
             transaction_cost: float = 0.001,
             max_position: float = 1.0,
             reward_vol_window: int = 20,
+            use_engine: bool = False,
+            backtest_engine: "Any | None" = None,
         ) -> None:
             super().__init__()
             assert len(prices) == len(features), "prices and features must have same length"
@@ -179,6 +207,8 @@ if _GYM_AVAILABLE:
             self.transaction_cost = float(transaction_cost)
             self.max_position = float(max_position)
             self.reward_vol_window = reward_vol_window
+            self.use_engine = use_engine
+            self._engine = backtest_engine  # BacktestEngine instance for engine mode
 
             feature_dim = features.shape[1]
             # Observation: features + [position_norm, unrealized_pnl_norm, cash_ratio]
@@ -190,7 +220,8 @@ if _GYM_AVAILABLE:
 
             self._n = len(prices)
             self._step_idx: int = 0
-            self._position: float = 0.0       # shares held (fractional)
+            # Price-replay bookkeeping (only used when use_engine=False)
+            self._position: float = 0.0
             self._cash: float = initial_cash
             self._entry_price: float = 0.0
             self._recent_returns: list[float] = []
@@ -202,14 +233,46 @@ if _GYM_AVAILABLE:
             options: dict | None = None,
         ) -> tuple[np.ndarray, dict]:
             super().reset(seed=seed)
-            self._step_idx = self.reward_vol_window  # start after warm-up
-            self._position = 0.0
-            self._cash = self.initial_cash
-            self._entry_price = self.prices[self._step_idx]
-            self._recent_returns = []
+            if self.use_engine and self._engine is not None:
+                # Engine mode: reset the BacktestEngine
+                self._engine.reset()
+                self._step_idx = 0
+                self._recent_returns = []
+            else:
+                # Price-replay mode
+                self._step_idx = self.reward_vol_window
+                self._position = 0.0
+                self._cash = self.initial_cash
+                self._entry_price = self.prices[self._step_idx]
+                self._recent_returns = []
             return self._get_obs(), {}
 
         def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
+            if self.use_engine and self._engine is not None:
+                return self._step_engine(action)
+            return self._step_price_replay(action)
+
+        # ── Engine mode step ─────────────────────────────────────────────
+
+        def _step_engine(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
+            """Step using BacktestEngine.step() — full pipeline simulation."""
+            obs_engine, reward, done, info = self._engine.step(action)
+            # Build observation: use current feature row + engine portfolio state
+            feat_idx = min(self._step_idx, len(self.features) - 1)
+            features_row = self.features[feat_idx]
+            extra = obs_engine.astype(np.float32)  # [equity_ratio, cash_ratio, pnl_norm]
+            obs = np.concatenate([features_row, extra])
+            self._step_idx += 1
+            self._recent_returns.append(reward)
+            if len(self._recent_returns) > self.reward_vol_window:
+                self._recent_returns.pop(0)
+            info["action_name"] = ACTIONS[int(action)]
+            return obs, float(reward), done, False, info
+
+        # ── Price-replay mode step ────────────────────────────────────────
+
+        def _step_price_replay(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
+            """Original price-replay step — no broker, no slippage model."""
             price_now = self.prices[self._step_idx]
             price_prev = self.prices[self._step_idx - 1] if self._step_idx > 0 else price_now
             ret = (price_now - price_prev) / (price_prev + 1e-8)
@@ -251,8 +314,14 @@ if _GYM_AVAILABLE:
             return obs, reward, done, False, info
 
         def _get_obs(self) -> np.ndarray:
-            features = self.features[self._step_idx]
-            price = self.prices[self._step_idx]
+            feat_idx = min(self._step_idx, len(self.features) - 1)
+            features = self.features[feat_idx]
+            if self.use_engine and self._engine is not None:
+                # Pull portfolio state from engine
+                extra = self._engine._get_obs().astype(np.float32)
+                return np.concatenate([features, extra])
+            # Price-replay bookkeeping
+            price = self.prices[feat_idx]
             total_value = self._cash + self._position * price
             unrealized_pnl_norm = float(
                 (self._position * (price - self._entry_price)) / (total_value + 1e-8)

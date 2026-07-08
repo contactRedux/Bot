@@ -181,32 +181,39 @@ pytest tests/models/test_models.py tests/models/test_walk_forward.py       # PyT
 
 ### Sub-Task 6 — Backtesting Engine
 
-**Status:** `[ ] pending`
+**Status:** `[x] complete`
 
-**Intent**
-Build an event-driven backtesting engine that simulates all strategies on historical data with realistic market microstructure assumptions (slippage, transaction costs, partial fills). This is how you validate a strategy before risking real capital.
+**What was built**
 
-**Expected Outcomes**
-- An event-driven simulator that replays historical bars and feeds them to strategies in strict chronological order.
-- Realistic order filling with configurable slippage and commission models.
-- A `Portfolio` class that tracks positions, cash, and PnL per asset and per strategy in real-time.
-- A full performance report covering all standard quant metrics plus per-strategy attribution.
+| File | Role |
+|---|---|
+| `backtesting/events.py` | `Event` base class + `BarEvent`, `SignalEvent`, `OrderEvent`, `FillEvent`, `HaltEvent` dataclasses. Cross-type `__lt__`/`__gt__` comparison on base class enables `heapq` and `sorted()` across all event types. |
+| `backtesting/broker.py` | `SimulatedBroker` with `FixedPercentageSlippage` (default 5 bps/side) and `HalfSpreadSlippage` models. Market fills at close ± slippage; BUY limit fills when `bar.low ≤ limit`; SELL limit fills when `bar.high ≥ limit`; stop orders on price-touch. Pending limit/stop orders are queued with configurable TTL (default 0 = day order). Commission: `max(min_commission, qty × per_share_rate)`. |
+| `backtesting/portfolio.py` | `Portfolio` tracks cash, signed position quantity, average cost basis, realised/unrealised PnL per asset, per-strategy realised PnL attribution. Handles long add, partial close, full close, short open, short cover, and long/short flip correctly. Equity curve appended on every `mark()` call. |
+| `backtesting/metrics.py` | `compute_metrics()` returns: total return, CAGR, annualised Sharpe, Sortino, Calmar, max drawdown (with peak/trough dates), annualised volatility, N trades, N wins/losses, win rate, profit factor, avg trade PnL, per-strategy attribution. All individual metric functions also importable. |
+| `backtesting/report.py` | `BacktestReport` dataclass: `to_json()`/`from_json()`, `to_dict()`/`from_dict()`, `save()`/`load()`, `summary()` (terminal-printable table), `compare()` (diff two reports). |
+| `backtesting/engine.py` | `BacktestEngine` with `run()` (full backtest) and `step()` (RL-compatible Gym interface). `from_datastore()` factory. Halt-on-drawdown via `halt_on_drawdown` param. Feature matrix sliced per bar to prevent look-ahead. Pending limit orders checked before new bar strategies run. `_build_bar_events()` sorts across all tickers deterministically. |
+| `backtesting/walkforward.py` | `WalkForwardBacktest`: expanding-window folds over OHLCVBar lists, optional `train_callback` for re-training ML models between folds, `WalkForwardResults.aggregate_metrics()` returns mean/std/min/max per fold metric. |
+| `backtesting/runner.py` | CLI `python -m backtesting.runner` with flags for `--strategies`, `--tickers`, `--start`, `--end`, `--interval`, `--capital`, `--slippage-pct`, `--commission`, `--halt-drawdown`, `--output`, `--walk-forward`, `--n-splits`, `--oos-days`. |
 
-**Todo List**
-1. Define `backtesting/events.py` — event types: `BarEvent`, `OrderEvent`, `FillEvent`, `SignalEvent`, `HaltEvent`. The event queue is the spine of the simulation.
-2. Implement `backtesting/engine.py` — `BacktestEngine`: loads historical data from `DataStore`, replays bar-by-bar in sorted time order, dispatches `BarEvent` to all strategies, routes `OrderEvent` to the simulated broker, and collects `FillEvent` results.
-3. Implement `backtesting/broker.py` — `SimulatedBroker`: accepts `OrderEvent`, applies slippage model (fixed-percentage or half-spread), simulates limit order fill logic (only fill if price crosses limit), emits `FillEvent`.
-4. Implement `backtesting/portfolio.py` — tracks cash, open positions (quantity + avg cost), realized PnL, unrealized PnL per asset and per strategy. Updates on every `FillEvent`.
-5. Implement `backtesting/metrics.py` — compute: total return, CAGR, annualized Sharpe, Sortino, Calmar, max drawdown, win rate, average hold duration, profit factor, per-strategy PnL attribution.
-6. Implement `backtesting/report.py` — `BacktestReport` object serializable to JSON; includes equity curve (list of portfolio values over time), trade log, and metric summary.
-7. Add `backtesting/runner.py` — CLI: `python -m backtesting.runner --strategies all --start 2020-01-01 --end 2024-01-01 --tickers AAPL MSFT BTC-USD`.
-8. Add walk-forward validation mode in `backtesting/walkforward.py`: rolls a training window and out-of-sample test window forward in time, training models on each fold before testing.
+**Test coverage:** 94 new tests in `tests/backtesting/` across 4 files — all passing.
 
-**Relevant Context**
-- Event-driven backtesting prevents look-ahead bias by construction — a strategy only sees data up to the current simulated bar.
-- Model slippage pessimistically: if mid-price is $100.00 and you buy at market, assume a fill at $100.05 (half-spread + market impact).
-- The `BacktestEngine` doubles as the RL agent's training environment — once complete, update `models/rl_agent.py`'s `TradingEnv` to wrap `BacktestEngine.step()` instead of its current price-replay stub.
-- The `StrategyOrchestrator.process_bar()` is the correct integration point: call it on each simulated bar and hand its returned `Order` list to the `SimulatedBroker`.
+| File | Tests | Coverage |
+|---|---|---|
+| `test_events.py` | 12 | Event type fields, sort-index priority, cross-type ordering, FillEvent.net_cost |
+| `test_broker.py` | 17 | Slippage models, market fill, limit fill/queue/expire, stop triggers, commission calc |
+| `test_portfolio.py` | 19 | Buy/sell accounting, partial close, short position, mark-to-market, strategy attribution, reset |
+| `test_metrics.py` | 22 | All individual metric functions, `compute_metrics()` integration |
+| `test_engine.py` | 24 | Full loop, multi-ticker, order→fill routing, halt-on-drawdown, step mode, report serialisation |
+
+**RL agent update:** `models/rl_agent.py` `TradingEnv` now supports two modes via `use_engine` / `backtest_engine` constructor parameters. Price-replay mode (default, unchanged) and engine mode (`BacktestEngine.step()`-driven). Existing tests are unaffected.
+
+**Cumulative test count:** 265 non-model tests + 56 model tests = **321 total, 0 failures**.
+
+**Deviations from plan**
+- `halt_on_drawdown` is an engine parameter rather than injected via `HaltEvent` from an external risk monitor — simpler and sufficient for backtesting.  The `HaltEvent` dataclass is available for Sub-Task 7's `DrawdownMonitor` to use when it is wired into the live pipeline.
+- Feature caching in the engine uses a simple dict keyed by `(ticker, bar_count)`. For very long backtests (> 10k bars × many tickers) this can grow; Sub-Task 7 can add an LRU eviction policy if memory becomes a concern.
+- `WalkForwardBacktest` takes a `train_callback` for re-training ML models between folds but does not call `train_model_walk_forward()` directly — decoupled so the caller decides which models to retrain without the backtesting package importing from `models/`.
 
 ---
 
