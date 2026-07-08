@@ -251,66 +251,47 @@ Updated: `docs/concepts/aws_cloud.md` §10, `README.md` AWS Terraform Deployment
 - Add `fee_rate: float` (default 0.001 = 10bps) to `SimulatedBroker`
 - Crypto funding rate: `funding_cost = position_value × funding_rate_8h` (sourced from Binance)
 
-### Validation
-- Backtesting broker tests (partial fills, queue model, slippage impact)
-- Execution tests (PaperBroker partial fill simulation)
-- Feature tests (order-book imbalance with mocked OrderBook)
-- `make test` must pass 567+ tests with no regressions
+### Validation ✅ COMPLETE
+- `tests/backtesting/test_partial_fills.py` — 12 tests passing (partial fills, limit-price check, remainder re-queuing, dust discard)
+- `tests/backtesting/test_slippage.py` — 14 tests passing (sqrt impact model, broker integration, helper function)
+- `tests/execution/test_paper_broker_partial.py` — 9 tests passing (PARTIAL status, metadata, cash accounting)
+- `tests/features/test_order_book_imbalance.py` — 11 tests passing (NaN on None, ±1 edges, manual formula, pipeline integration)
+- `make test` → **641 passed, 0 failed** (no regressions)
 
 ---
 
 ## Cross-phase docs and config updates
 
-- [`README.md`](README.md) — updated through Phase 4 ✅
+- [`README.md`](README.md) — updated through Phase 7 ✅
 - [`.env.example`](.env.example) — updated through Phase 4 ✅
 - [`aws_cloud.md`](packages/quant-engine/docs/concepts/aws_cloud.md) — updated through Phase 3 ✅
-- Future: [`microstructure.md`](packages/quant-engine/docs/concepts/microstructure.md) — new concept doc for Phase 7
+- [`algo-trading-plan.md`](algo-trading-plan.md) — Sub-Tasks 12–14 added, phase status table complete ✅
+- [`packages/quant-engine/README.md`](packages/quant-engine/README.md) — test counts, new targets, new features ✅
 
 ---
 
-## Validation matrix by phase
+## Final validation matrix (all phases complete)
 
-### Phase 5
-- `pytest tests/integration/ -v`
-- `npx playwright test` (if added)
-- `make test` regression (567+ pass)
-- `npm run lint && npm run build`
-
-### Phase 6
-- `mypy api/ config/settings.py data/store.py execution/base.py strategies/base.py`
-- `make test` regression (567+ pass)
-
-### Phase 7
-- `make test` regression (567+ pass)
-- New broker/execution/feature tests
-- Dashboard lint/build
+| Check | Result |
+|-------|--------|
+| `make test` (non-model) | ✅ 641 passed, 0 failed |
+| `make test-models` | ✅ 37 passed, 0 failed |
+| `make test-integration` | ✅ 28 passed, 0 failed |
+| `mypy api/ config/ data/store.py execution/base.py strategies/base.py` | ✅ 0 errors, 16 files |
+| `ruff check` (all touched files) | ✅ 0 errors |
+| `npm run lint && npm run build` | ✅ clean |
+| Playwright E2E scaffold | ✅ `make test-e2e` target + 4 specs |
 
 ---
 
-## Test baseline at start of Phase 5
+## Test baseline: Phase 5 start → Final
 
-| Suite | Collected | Passing | Skipped | Failing |
-|-------|-----------|---------|---------|---------|
-| Non-model (`make test`) | 570 | 567 | 3 | 0 |
-| Model (`make test-models`) | 37 | 37 | 0 | 0 |
-| **Total** | **607** | **604** | **3** | **0** |
+| Suite | Phase 5 start | **Final** |
+|-------|---------------|-----------|
+| Non-model (`make test`) | 567 passed / 570 collected | **641 passed / 644 collected** |
+| Model (`make test-models`) | 37 passed | **37 passed** |
+| Integration (`make test-integration`) | — (new) | **28 passed** |
+| **Total passing** | **604** | **706** |
+| Failing | 0 | **0** |
 
-The 3 skipped tests are pre-existing model-test skips (platform/dependency guards), not regressions.
-
----
-
-## Risks and constraints
-
-- Integration tests must be hermetic — no live broker or external data dependencies.
-- Playwright E2E requires a running dev server; document this clearly in `make test-e2e`.
-- `mypy --strict` global flip would break ~100+ pre-existing `Any` usages; module-by-module approach is required.
-- Partial fill model complexity: keep it simple (volume participation + limit-price check). Do not attempt a full order-book simulation.
-- Order-book imbalance feature is best-effort — falls back to `NaN` when depth stream data is unavailable, which is the common case in backtesting.
-
----
-
-## Recommended execution chunks
-
-1. Phase 5 — integration tests first (backend), then Playwright if clean
-2. Phase 6 — targeted mypy per-module, fix errors, verify no regressions
-3. Phase 7 — partial fills first, then slippage knobs, then order-book imbalance feature last
+The 3 skipped tests are pre-existing platform/dependency guards in the model suite, not regressions.

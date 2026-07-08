@@ -21,27 +21,22 @@ The purpose of this project is to provide a single platform where quant research
 
 ### Backend (`packages/quant-engine`)
 
-- Multi-source data layer with feeds for Alpaca, Binance, CoinGecko, yfinance, NewsAPI, GDELT, Alpha Vantage, and SEC EDGAR
-- Bloomberg wiring documented and environment-ready, with full B-PIPE implementation planned next
-- Feature pipeline with 40+ technical indicators plus sentiment, macro, and statistical features
+- Multi-source data layer with 9 feed adapters: Alpaca, Binance, Bloomberg, CoinGecko, yfinance, NewsAPI, GDELT, Alpha Vantage, and SEC EDGAR
+- Bloomberg B-PIPE adapter fully implemented (`data/feeds/bloomberg_feed.py`) with graceful `blpapi`-absent startup; feed priority policy and sentiment quality weights in place
+- Feature pipeline with 40+ technical indicators, sentiment, macro, statistical features, **and order-book imbalance** (live microstructure feature)
 - ML stack including LSTM, Transformer, Gaussian Process, LightGBM, PPO RL, and ensemble models
-- Six implemented strategy families:
-  - momentum
-  - mean reversion
-  - statistical arbitrage
-  - market making
-  - sentiment/news
-  - macro factor
-- Event-driven backtester with metrics, reporting, and walk-forward model validation
+- Six implemented strategy families: momentum, mean reversion, statistical arbitrage, market making, sentiment/news, macro factor
+- Event-driven backtester with metrics, reporting, and walk-forward model validation; **partial fill model**, **square-root market impact slippage**, and **fee/funding hooks** for execution realism
 - Risk engine covering VaR, CVaR, drawdown monitoring, daily loss controls, and correlation-aware scaling
-- Execution layer for paper trading plus Alpaca and Binance brokerage adapters
-- FastAPI REST API and WebSocket feed for dashboard and operator workflows
-- Structured configuration via pydantic settings and strategy YAML
-- Localhost-only API binding by default (`127.0.0.1`); OIDC Bearer auth seam for production
+- Execution layer: `PaperBroker` (with optional partial-fill mode), `AlpacaBroker`, `BinanceBroker`
+- FastAPI REST API and WebSocket feed; localhost-only binding; OIDC Bearer auth seam for production; RBAC on all mutation endpoints
+- AWS Terraform IaC baseline (11 `.tf` files: VPC, ECR, ECS Fargate, RDS PG16, S3, Secrets Manager, IAM, CloudWatch)
+- Incremental `mypy` hardening — 0 errors on `api/`, `config/settings.py`, `data/store.py`, `execution/base.py`, `strategies/base.py`
 
 ### Frontend (`packages/dashboard`)
 
 - React + TypeScript dashboard with pages for overview, backtest exploration, live monitoring, news, and risk
+- Overview page fetches live OHLCV data from `GET /api/portfolio/price-history` via TanStack React Query (60 s refresh)
 - Zustand stores for signals, portfolio, fills, risk state, and WebSocket status
 - Auto-reconnect WebSocket hook for real-time updates
 - Recharts-based visualizations for portfolio and market/operator views
@@ -49,17 +44,17 @@ The purpose of this project is to provide a single platform where quant research
 
 ### Quality and testing
 
-- Extensive automated backend coverage across API, backtesting, execution, features, models, risk, and strategies
-- Dashboard lint/build validation in place
-- Current validated state includes passing backend test suites and successful frontend lint/build checks
+| Suite | Collected | Passing | Skipped | Failing |
+|-------|-----------|---------|---------|---------|
+| Non-model (`make test`) | 644 | 641 | 3 | 0 |
+| Model (`make test-models`) | 37 | 37 | 0 | 0 |
+| Integration (`make test-integration`) | 28 | 28 | 0 | 0 |
+| **Total** | **709** | **706** | **3** | **0** |
 
-## Planned Additions
-
-The next roadmap is focused on moving the platform from a strong research/paper-trading stack toward a more institutional-grade system:
-
-- Integration and E2E test coverage
-- Incremental hardening toward `mypy --strict`
-- Execution realism improvements such as partial fills, queue awareness, and microstructure features
+- `mypy` → **0 errors** on all targeted API + store + execution modules
+- `ruff` → **0 errors** on all touched files
+- Frontend `npm run lint && npm run build` → **clean**
+- Playwright E2E suite scaffolded (`make test-e2e`, requires `make dev` first)
 
 ---
 
@@ -69,17 +64,19 @@ The next roadmap is focused on moving the platform from a strong research/paper-
 algo-trading/
 ├── packages/
 │   ├── quant-engine/         Python backend
-│   │   ├── data/             8 feed adapters (Alpaca, Binance, Bloomberg, NewsAPI, …)
-│   │   ├── features/         40 technical indicators + NLP + macro signals
+│   │   ├── data/             9 feed adapters (Alpaca, Binance, Bloomberg, NewsAPI, …)
+│   │   ├── features/         40+ indicators + NLP + macro + order-book imbalance
 │   │   ├── models/           LSTM · Transformer · GP · LightGBM · PPO RL · Ensemble
 │   │   ├── strategies/       6 strategy classes + StrategyOrchestrator
-│   │   ├── backtesting/      Event-driven BacktestEngine + walk-forward CV
+│   │   ├── backtesting/      Event-driven BacktestEngine + partial fills + sqrt slippage
 │   │   ├── risk/             RiskManager · VaR/CVaR · DrawdownMonitor
-│   │   ├── execution/        PaperBroker · AlpacaBroker · BinanceBroker
+│   │   ├── execution/        PaperBroker (partial mode) · AlpacaBroker · BinanceBroker
 │   │   ├── api/              FastAPI REST + WebSocket /ws/feed
 │   │   ├── config/           pydantic-settings · strategy YAML · structlog
+│   │   ├── infra/terraform/  11 .tf files — full AWS IaC baseline
 │   │   └── docs/concepts/    Learning guides for every concept
 │   └── dashboard/            React + TypeScript + Vite + Tailwind
+│       ├── playwright.config.ts  E2E test config (Chromium)
 │       └── src/
 │           ├── components/   PriceChart · PortfolioSummary · SignalTable · RiskPanel …
 │           ├── hooks/        useWebSocketFeed (auto-reconnect)
@@ -87,7 +84,7 @@ algo-trading/
 │           ├── pages/        Overview · Backtest · Live · News · Risk
 │           └── store/        Zustand slices (signals, portfolio, risk, fills)
 ├── .env.example              All environment variables documented
-├── Makefile                  make dev / test / backtest / lint
+├── Makefile                  make dev / test / test-integration / test-e2e / backtest / lint
 └── README.md                 ← you are here
 ```
 
@@ -97,13 +94,13 @@ Bloomberg / Alpaca / Binance / NewsAPI / yfinance
         ↓  data/feeds/
    DataStore (SQLite → PostgreSQL on AWS)
         ↓  features/pipeline.py
-   Feature matrix (OHLCV + 40 indicators + sentiment + macro)
+   Feature matrix (OHLCV + 40 indicators + sentiment + macro + order-book imbalance)
         ↓  models/  +  strategies/
    Aggregated orders (StrategyOrchestrator)
         ↓  risk/manager.py
    Risk-gated orders (APPROVE / SCALE_DOWN / REJECT)
         ↓  execution/
-   Paper fills  OR  Alpaca/Binance live orders
+   Paper fills (optional partial-fill mode)  OR  Alpaca/Binance live orders
         ↓  api/ws/feed.py
    React Dashboard  (real-time WebSocket)
 ```
@@ -133,7 +130,7 @@ cp .env.example .env
 make install
 ```
 
-This runs `pip install -e ".[data,ml,api,dev]"` in the quant-engine venv and `npm install` in the dashboard.
+This runs `pip install -e ".[data,ml,api,dev]"` in the quant-engine package and `npm install` in the dashboard.
 
 ### 3. Start the backend API server
 
@@ -164,7 +161,6 @@ make dev
 
 ```bash
 cd packages/quant-engine
-source .venv/bin/activate
 python -m backtesting.runner \
   --tickers AAPL MSFT \
   --strategies momentum mean_reversion \
@@ -189,8 +185,11 @@ make backtest
 ## Running Tests
 
 ```bash
-make test          # all non-model tests (fast, ~30s)
-make test-models   # model tests (slower, requires libomp on macOS)
+make test               # all non-model tests (~4s, 641 passing)
+make test-models        # ML model tests (macOS OpenMP isolation, two-pass)
+make test-integration   # backend integration tests (full lifespan, 28 tests)
+make test-e2e           # Playwright E2E (requires: make dev in a second terminal)
+make test-cov           # with HTML coverage report
 ```
 
 Tests are split because LightGBM and PyTorch share conflicting OpenMP libraries on macOS arm64.
@@ -229,9 +228,7 @@ Bloomberg provides institutional-quality market data and is used as the **anchor
 BLOOMBERG_APP_NAME=your_app_name   # from Bloomberg Desktop or B-PIPE
 ```
 
-If `BLOOMBERG_APP_NAME` is unset, the system runs entirely on free sources with no architecture change. See [`docs/concepts/sentiment_nlp.md`](packages/quant-engine/docs/concepts/sentiment_nlp.md) for how Bloomberg news is weighted in sentiment aggregation.
-
-The Bloomberg feed adapter (`data/feeds/bloomberg_feed.py`) is scaffolded and documented. A live B-PIPE server connection is required for production use.
+If `BLOOMBERG_APP_NAME` is unset, the system runs entirely on free sources with no architecture change. The Bloomberg feed adapter (`data/feeds/bloomberg_feed.py`) uses an optional `blpapi` import — startup is always clean even when the library is not installed.
 
 ---
 
@@ -254,7 +251,7 @@ The full AWS infrastructure baseline lives in [`infra/terraform/`](infra/terrafo
 
 - **VPC** with public + private subnets across 2 AZs, NAT gateway for private-subnet egress
 - **ECR** repository for the quant-engine Docker image (scan-on-push, immutable tags)
-- **ECS Fargate** cluster + service running the quant-engine API as a non-root container
+- **ECS Fargate** cluster + service running the quant-engine API as a non-root container (UID 1001, read-only rootfs, drop ALL caps)
 - **RDS PostgreSQL 16** in private subnets, encrypted, deletion-protected, with automated backups
 - **S3** artifacts bucket (AES-256 encrypted, versioned, lifecycle archival to Glacier)
 - **Secrets Manager** for all API keys and the database URL — never stored in task definitions
@@ -289,9 +286,9 @@ aws secretsmanager put-secret-value \
   --secret-string '{"alpaca_api_key":"...","alpaca_secret_key":"...","newsapi_key":"..."}'
 ```
 
-> **Security note:** The ECS task is configured to run as UID 1001 (non-root), with a
-> read-only root filesystem and all Linux capabilities dropped. Secrets are injected
-> from Secrets Manager at runtime — no API keys appear in task definition plaintext.
+> **Security note:** The ECS task runs as UID 1001 (non-root), with a read-only root filesystem
+> and all Linux capabilities dropped. Secrets are injected from Secrets Manager at runtime —
+> no API keys appear in task definition plaintext.
 
 ---
 
@@ -309,7 +306,7 @@ All theoretical concepts are documented with formulas, code examples, and cross-
 | [`docs/concepts/technical_indicators.md`](packages/quant-engine/docs/concepts/technical_indicators.md) | RSI, MACD, ADX, Bollinger Bands, VWAP, Ichimoku, ATR |
 | [`docs/concepts/gaussian_process.md`](packages/quant-engine/docs/concepts/gaussian_process.md) | GP prior/posterior, kernels, uncertainty quantification |
 | [`docs/concepts/macro_regimes.md`](packages/quant-engine/docs/concepts/macro_regimes.md) | VIX, yield curve, USD momentum, PEAD, regime multipliers |
-| [`docs/concepts/aws_cloud.md`](packages/quant-engine/docs/concepts/aws_cloud.md) | S3, RDS, ECS Fargate, Secrets Manager, CloudWatch |
+| [`docs/concepts/aws_cloud.md`](packages/quant-engine/docs/concepts/aws_cloud.md) | S3, RDS, ECS Fargate, Secrets Manager, CloudWatch, Terraform IaC |
 | [`risk/README.md`](packages/quant-engine/risk/README.md) | Operational risk management reference |
 
 ---
@@ -328,7 +325,7 @@ All variables are documented in [`.env.example`](.env.example). Key variables:
 | `BINANCE_SECRET_KEY` | Live crypto | Binance secret |
 | `NEWSAPI_KEY` | News sentiment | NewsAPI key |
 | `ALPHA_VANTAGE_KEY` | Fundamentals | Alpha Vantage key |
-| `BLOOMBERG_APP_NAME` | Bloomberg data | B-PIPE app name (optional) |
+| `BLOOMBERG_APP_NAME` | Bloomberg data | B-PIPE app name (optional — system runs without it) |
 | `AWS_REGION` | Cloud deployment | AWS region |
 | `AWS_ACCOUNT_ID` | Cloud deployment | AWS account |
 | `S3_BUCKET_NAME` | Model/report storage | S3 bucket |
@@ -344,12 +341,16 @@ All variables are documented in [`.env.example`](.env.example). Key variables:
 ## Makefile Commands
 
 ```bash
-make install        # install all Python + Node dependencies
-make dev            # start dashboard dev server (Vite HMR)
-make api            # start FastAPI server (uvicorn --reload)
-make test           # run non-model tests
-make test-models    # run model tests (separate for macOS OpenMP isolation)
-make backtest       # run example backtest via CLI runner
-make lint           # ruff + mypy (Python) + eslint (TypeScript)
-make fmt            # black + isort (Python) + prettier (TypeScript)
+make install            # install all Python + Node dependencies
+make dev                # start API server + dashboard in parallel
+make api                # start FastAPI server only (uvicorn --reload, 127.0.0.1:8000)
+make dashboard          # start Vite dashboard only
+make test               # run non-model tests (641 passing)
+make test-models        # run ML model tests (two-pass macOS OpenMP isolation)
+make test-integration   # run backend integration tests (full lifespan)
+make test-e2e           # run Playwright E2E tests (needs running dev server)
+make test-cov           # run tests with HTML coverage report
+make backtest           # run example backtest via CLI runner
+make lint               # ruff (Python) + eslint (TypeScript)
+make fmt                # ruff format (Python) + prettier (TypeScript)
 ```

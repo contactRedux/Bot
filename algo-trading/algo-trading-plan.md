@@ -479,7 +479,7 @@ Updated: `docs/concepts/aws_cloud.md` (Section 10: Terraform IaC Baseline), `REA
 
 ## Institutional-Grade Upgrade Phases (next-steps.md)
 
-These phases are tracked in detail in `next-steps.md`. Summary:
+These phases are tracked in detail in `next-steps.md`. All seven phases are complete.
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -487,8 +487,46 @@ These phases are tracked in detail in `next-steps.md`. Summary:
 | 2 — Bloomberg B-PIPE | ✅ **Complete** | Full `bloomberg_feed.py` adapter, priority policy, sentiment weighting |
 | 3 — AWS Terraform IaC | ✅ **Complete** | 11 `.tf` files: VPC, ECR, ECS Fargate, RDS, S3, Secrets Manager, IAM, CloudWatch |
 | 4 — PriceChart OHLC wiring | ✅ **Complete** | `GET /api/portfolio/price-history`, typed frontend, `Overview.tsx` live data |
-| 5 — Integration/E2E tests | 🔲 **Next** | Backend integration tests + optional Playwright E2E |
-| 6 — mypy --strict hardening | 🔲 **Planned** | Incremental strict typing on API + store + execution modules |
-| 7 — Execution realism | 🔲 **Planned** | Partial fills, queue-aware fill model, latency/slippage knobs, order-book imbalance feature |
+| 5 — Integration/E2E tests | ✅ **Complete** | 28 integration tests (full lifespan), Playwright E2E scaffold, `make test-integration` / `test-e2e` |
+| 6 — mypy --strict hardening | ✅ **Complete** | Per-module overrides, 0 mypy errors on targeted modules, fixed pre-existing type bugs |
+| 7 — Execution realism | ✅ **Complete** | `SqrtImpactSlippage`, partial fills in `SimulatedBroker` + `PaperBroker`, order-book imbalance feature, 46 new tests |
 
-**Current test baseline:** 567 passing non-model tests + 37 model tests = **604 total, 0 failures**.
+### Sub-Task 12 — Phase 5: Integration/E2E Suite
+
+**Status:** `[x] complete`
+
+**What was built**
+- `tests/integration/__init__.py` — new package
+- `tests/integration/test_api_app_state.py` — 15 tests: health, root, strategies, risk status, portfolio, WebSocket heartbeat (full real lifespan, no pre-injected state)
+- `tests/integration/test_portfolio_chart_flow.py` — 13 tests: seeded DataStore price-history flow, portfolio endpoints, backtest round-trip with background task polling
+- `packages/dashboard/playwright.config.ts` — Playwright config (Chromium only, baseURL `http://localhost:5173`, 30 s timeout)
+- `packages/dashboard/tests/e2e/overview.spec.ts` — 4 E2E specs: page loads, heading visible, no JS console errors, React root mounted
+- `packages/dashboard/package.json` — `@playwright/test ^1.47.0` added to devDependencies
+- `Makefile` — `test-integration` and `test-e2e` targets
+
+### Sub-Task 13 — Phase 6: mypy --strict Hardening
+
+**Status:** `[x] complete`
+
+**What was built**
+- `pyproject.toml` — `[[tool.mypy.overrides]]` for `api.*`, `config.settings`, `data.store`, `execution.base`, `strategies.base` with `disallow_untyped_defs = true` and `warn_return_any = true`
+- `data/store.py` — typed SQLite pragma listener, `# type: ignore[attr-defined]` on ORM column attribute accesses and `rowcount`, correct `int` type annotation on all `inserted` variables
+- `api/deps.py` — explicit `state: AppState` narrowing before return in `get_app_state()`
+- `api/main.py` — `Literal["ok", "degraded"]` type for `_status`; `from typing import Literal` import; `StrategyOrchestrator(strategies=[], config=...)` signature fix
+- `api/routes/backtest.py` — `from datetime import UTC`; `bar_interval=` kwarg (was `interval=`); correct `StrategyOrchestrator` call; `_all_strategies` attribute access
+- **Result:** `python3.11 -m mypy api/ config/settings.py data/store.py execution/base.py strategies/base.py` → **0 errors, 16 source files**
+
+### Sub-Task 14 — Phase 7: Execution Realism + Microstructure Layer
+
+**Status:** `[x] complete`
+
+**What was built**
+- `backtesting/broker.py` — `SlippageModelType` enum; `SqrtImpactSlippage` class (impact coefficient, ADV-injection pattern, fallback to fixed bps); `volume_participation_rate`, `min_fill_pct`, `fee_rate` params on `SimulatedBroker`; `_fill_market_with_partial()` caps fills per bar and re-queues remainder; `update_adv()` EMA daily-volume tracker; `calc_sqrt_slippage()` public helper; `process_bar()` handles pending market orders (partial remainder fills on next bar)
+- `execution/paper_broker.py` — `partial_fill_mode: bool = False` (off by default, backward-compat); `volume_participation_rate` and `simulated_bar_volume` params; `_execute_partial()` returns `OrderStatus.PARTIAL` with `remaining_qty` in metadata; removed unused `portfolio_value` variable
+- `features/pipeline.py` — `order_book: OrderBook | None` init param; `set_order_book()` method; `_compute_order_book_imbalance()` static method using top-5 bid/ask levels; `order_book_imbalance` scalar column broadcast into the feature matrix when a book snapshot is set
+- `tests/backtesting/test_slippage.py` — 14 tests
+- `tests/backtesting/test_partial_fills.py` — 12 tests (includes limit order price-check tests)
+- `tests/execution/test_paper_broker_partial.py` — 9 tests
+- `tests/features/test_order_book_imbalance.py` — 11 tests
+
+**Cumulative test count:** 641 passing non-model tests (644 collected, 3 pre-existing skips) + 37 model tests + 28 integration tests = **706 total, 0 failures**.
