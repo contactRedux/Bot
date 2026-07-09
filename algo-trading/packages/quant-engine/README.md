@@ -1,6 +1,6 @@
 # quant-engine
 
-Python backend for the algorithmic trading platform. Contains data ingestion, feature engineering, ML models, strategy logic, backtesting, risk management, and the FastAPI server.
+Python backend for the algorithmic trading platform. Contains data ingestion, feature engineering, ML models, strategy logic, Bayesian optimisation, walk-forward validation, backtesting, risk management, live trading engine, and the FastAPI server.
 
 ## Setup
 
@@ -16,21 +16,37 @@ brew install libomp
 
 ```
 quant-engine/
-├── config/        Settings (pydantic-settings), structured logging
+├── config/        Settings (pydantic-settings), strategy_config.yaml, structlog
 ├── data/          9 feed adapters (yfinance, Alpaca, Binance, CoinGecko,
 │                  NewsAPI, GDELT, Alpha Vantage, SEC EDGAR, Bloomberg)
-│                  + DataStore (SQLAlchemy), DataPipeline (APScheduler)
-├── features/      Technical, statistical, fundamental, sentiment, macro
-│                  + order-book imbalance + FeaturePipeline
+│                  + DataStore (SQLAlchemy, dialect-agnostic), DataPipeline (APScheduler)
+├── features/      Technical, statistical, fundamental, sentiment, macro,
+│                  order-book imbalance + FeaturePipeline
 ├── models/        LSTM, Transformer, GP, LightGBM, PPO RL, Ensemble + ModelRegistry
-├── strategies/    Momentum, mean reversion, stat-arb, market-making, sentiment, macro factor
-│                  + StrategyOrchestrator
+├── strategies/    9 strategy classes + StrategyOrchestrator
+│   ├── momentum.py           LSTM+Transformer ensemble, ADX filter, cooldown
+│   ├── mean_reversion.py     Bollinger Band z-score, ATR stop-loss
+│   ├── stat_arb.py           Engle-Granger cointegration, OU half-life filter
+│   ├── market_making.py      Avellaneda-Stoikov RL-adjusted quotes, inventory skew
+│   ├── sentiment.py          FinBERT news sentiment z-score, decay weighting
+│   ├── macro_factor.py       VIX regime × yield curve × earnings surprise
+│   ├── kalman_trend.py       1D Kalman filter, trades normalised innovation ν/√S
+│   ├── kelly_vol.py          Fractional Kelly + vol targeting (Moreira & Muir 2017)
+│   └── vwap_reversion.py     VWAP deviation %, ATR volatility + volume filters
 ├── backtesting/   Event-driven engine, SimulatedBroker (partial fills + sqrt slippage),
-│                  portfolio, metrics, walk-forward CV
+│   │              portfolio, metrics, walk-forward CV, Bayesian optimiser
+│   ├── engine.py             Look-ahead safe simulation loop
+│   ├── optimizer.py          Bayesian HPO — Optuna TPE sampler
+│   ├── walkforward.py        Expanding-window OOS validation
+│   ├── broker.py             SimulatedBroker, SqrtImpactSlippage, partial fills
+│   ├── portfolio.py          Cash + position + PnL accounting
+│   ├── metrics.py            Sharpe, Sortino, Calmar, CAGR, max drawdown, profit factor
+│   └── report.py             BacktestReport serialisation
 ├── risk/          RiskManager, VaR/CVaR, DrawdownMonitor, correlation checker
-├── execution/     PaperBroker (partial-fill mode) + AlpacaBroker + BinanceBroker + BrokerFactory
+├── execution/     TradingEngine (live loop), PaperBroker (partial-fill mode),
+│                  AlpacaBroker, BinanceBroker, BrokerFactory
 ├── api/           FastAPI REST + WebSocket server
-│   ├── routes/    backtest, portfolio (incl. price-history), risk, signals, strategies
+│   ├── routes/    backtest, news, optimize, portfolio, risk, signals, strategies, trading
 │   ├── ws/        WebSocket feed (/ws/feed)
 │   ├── deps.py    AppState dependency injection + require_operator OIDC seam
 │   ├── schemas.py Pydantic request/response models
@@ -46,7 +62,7 @@ quant-engine/
     ├── integration/   Full-lifespan integration tests (TestClient, DataStore)
     ├── models/        All ML model suites (run separately via make test-models)
     ├── risk/          Correlation, limits, manager, monitor, VaR
-    └── strategies/    Base, orchestrator, all 6 strategy classes
+    └── strategies/    Base, orchestrator, all 9 strategy classes
 ```
 
 ## Running the server
@@ -104,28 +120,98 @@ The 3 skips are pre-existing platform/dependency guards in the model suite.
 | POST | `/api/backtest/run` | `require_operator` | Trigger a new backtest (async background task) |
 | GET | `/api/backtest/{run_id}/status` | — | Poll run progress |
 | GET | `/api/backtest/{run_id}` | — | Retrieve completed result |
+| GET | `/api/backtest/list` | — | List all cached runs |
 | DELETE | `/api/backtest/{run_id}` | `require_operator` | Delete a cached run |
+| POST | `/api/backtest/walkforward` | `require_operator` | Trigger walk-forward OOS validation |
+| POST | `/api/optimize/run` | `require_operator` | Trigger Bayesian HPO (Optuna TPE) |
+| GET | `/api/optimize/{run_id}/status` | — | Poll optimisation progress |
+| GET | `/api/optimize/{run_id}` | — | Retrieve optimisation result |
+| GET | `/api/optimize/spaces` | — | List available parameter search spaces |
+| GET | `/api/news` | — | Recent news articles with sentiment scores |
 | GET | `/api/portfolio` | — | Live portfolio state (cash, positions, PnL) |
 | GET | `/api/portfolio/history` | — | Equity curve history |
 | GET | `/api/portfolio/trades` | — | Recent fills |
-| GET | `/api/portfolio/price-history` | — | OHLCV bars from DataStore (`?ticker=&interval=&limit=`) |
+| GET | `/api/portfolio/price-history` | — | OHLCV bars (`?ticker=&interval=&limit=`) |
 | GET | `/api/risk/status` | — | Risk snapshot (VaR, drawdown, halt state) |
 | POST | `/api/risk/resume` | `require_operator` | Clear a trading halt |
 | GET | `/api/signals/latest` | — | Latest signals from all strategies |
 | GET | `/api/strategies` | — | List all strategies |
 | PATCH | `/api/strategies/{id}` | `require_operator` | Enable/disable a strategy at runtime |
-| WS | `/ws/feed` | — | Real-time event stream (signals, fills, risk, heartbeat) |
+| GET | `/api/trading/status` | — | TradingEngine status (running, tickers, loops) |
+| POST | `/api/trading/start` | `require_operator` | Start the live trading loop |
+| POST | `/api/trading/stop` | `require_operator` | Stop the live trading loop |
+| POST | `/api/trading/tickers` | `require_operator` | Update the ticker universe |
+| WS | `/ws/feed` | — | Real-time event stream (signals, fills, portfolio, news, risk, heartbeat) |
 
 **Auth note:** `require_operator` is a no-op when `OIDC_ISSUER_URL` is unset (default in dev). Set it in `.env` to enable JWT Bearer validation in production.
 
 ## Trading modes
 
 Set `TRADING_MODE` in the root `.env` file:
-- `dev`   — no live connections; PaperBroker with no API keys required
-- `paper` — live data feeds + PaperBroker (simulated fills, real market data)
-- `live`  — live data feeds + real order execution via Alpaca/Binance (requires API keys)
+- `dev`   — no live connections; PaperBroker with no API keys required; engine does **not** auto-start
+- `paper` — live data feeds + PaperBroker (simulated fills, real market data); engine **auto-starts**
+- `live`  — live data feeds + real order execution via Alpaca/Binance (requires API keys); engine **auto-starts**
 
 `BrokerFactory` refuses to start in `live` mode without at least one broker's keys set.
+
+Use `POST /api/trading/start|stop` or the `/strategies` dashboard page to control the engine at runtime.
+
+## Strategies
+
+All strategies inherit from `BaseStrategy` and are registered via `strategy_config.yaml`:
+
+| ID | Class | Math basis | Key config |
+|----|-------|-----------|-----------|
+| `momentum` | `MomentumStrategy` | LSTM+Transformer ensemble, Harvey (1993) momentum | `entry_threshold`, `cooldown_bars`, `stop_loss_pct` |
+| `mean_reversion` | `MeanReversionStrategy` | Bollinger Bands, z-score, ATR | `lookback_bars`, `entry_z_score`, `stop_atr_multiplier` |
+| `stat_arb` | `StatArbStrategy` | Engle-Granger cointegration, OU process | `entry_z_score`, `max_half_life_bars`, `default_pairs` |
+| `market_making` | `MarketMakingStrategy` | Avellaneda-Stoikov, PPO RL quote adjustment | `base_half_spread`, `max_inventory`, `inventory_skew_factor` |
+| `sentiment` | `SentimentStrategy` | FinBERT, exponential decay weighting | `sentiment_window_hours`, `entry_z_score`, `min_article_count` |
+| `macro_factor` | `MacroFactorStrategy` | VIX regime, yield curve, PEAD | `vix_fear_threshold`, `fear_reduction_factor` |
+| `kalman_trend` | `KalmanTrendStrategy` | Harvey (1989) 1D Kalman filter | `observation_noise`, `process_noise`, `entry_threshold` |
+| `kelly_vol` | `KellyVolStrategy` | Thorp (1967) Kelly, Moreira & Muir (2017) vol targeting | `vol_target_pct`, `kelly_fraction`, `lookback_bars` |
+| `vwap_reversion` | `VWAPReversionStrategy` | VWAP microstructure, ATR filter | `vwap_window`, `entry_band_pct`, `atr_filter` |
+
+## Bayesian optimisation
+
+```python
+from backtesting.optimizer import StrategyOptimizer
+from strategies.kalman_trend import KalmanTrendStrategy
+from strategies.orchestrator import StrategyOrchestrator
+
+optimizer = StrategyOptimizer(
+    bars=bars_dict,
+    strategy_factory=lambda trial: KalmanTrendStrategy(
+        config={**StrategyOptimizer.kalman_trend_space(trial), "enabled": True},
+        tickers=["AAPL", "NVDA"],
+    ),
+    orchestrator_factory=lambda s: StrategyOrchestrator(strategies=s, config={}),
+    n_trials=50,
+    objective="sharpe",   # sharpe | sortino | calmar | total_return
+)
+result = optimizer.run()
+print(result.best_params)  # {'observation_noise': 0.82, 'process_noise': 0.03, ...}
+```
+
+Available search spaces: `momentum_space`, `mean_reversion_space`, `kelly_vol_space`, `kalman_trend_space`, `vwap_reversion_space`.
+
+## Walk-forward validation
+
+```python
+from backtesting.walkforward import WalkForwardBacktest
+
+wfb = WalkForwardBacktest(
+    bars=bars_dict,
+    orchestrator_factory=make_orchestrator,  # fresh instance per fold
+    n_splits=4,
+    oos_size_days=252,
+    min_train_days=365,
+    initial_capital=100_000.0,
+)
+results = wfb.run()
+agg = results.aggregate_metrics()
+# agg['sharpe_ratio'] → {'mean': 0.92, 'std': 0.34, 'min': 0.45, 'max': 1.37}
+```
 
 ## AppState fields
 
@@ -137,24 +223,24 @@ Set `TRADING_MODE` in the root `.env` file:
 | `monitor` | `DrawdownMonitor \| None` | Drawdown + daily-loss monitor |
 | `risk_manager` | `RiskManager \| None` | Order gate (APPROVE/SCALE_DOWN/REJECT) |
 | `orchestrator` | `StrategyOrchestrator \| None` | All active strategies |
+| `trading_engine` | `TradingEngine \| None` | Live trading loop controller |
 | `portfolio` | `Portfolio \| None` | Live position + PnL tracking |
 | `data_store` | `DataStore \| None` | SQLAlchemy-backed market data store |
-| `backtest_results` | `dict[str, dict]` | Cached backtest run results |
+| `backtest_results` | `dict[str, dict]` | Cached backtest / optimisation results |
 | `backtest_status` | `dict[str, dict]` | In-progress run tracking |
-| `latest_signals` | `list[dict]` | Last signal from each strategy |
-| `equity_history` | `list[float]` | Equity curve for VaR and charts |
+| `latest_signals` | `list[dict]` | Last 500 signals from all strategies |
+| `equity_history` | `list[float]` | Equity curve (last 2000 points) for VaR and charts |
 | `trading_mode` | `str` | `"dev"` / `"paper"` / `"live"` |
 | `version` | `str` | App version string |
 | `started_at` | `float` | Startup timestamp for uptime |
 
-## Execution realism features (Phase 7)
+## Execution realism features
 
 ### SimulatedBroker (backtesting)
 
 ```python
 from backtesting.broker import SimulatedBroker, SqrtImpactSlippage
 
-# Square-root market impact slippage
 broker = SimulatedBroker(
     slippage_model=SqrtImpactSlippage(impact_coeff=0.1),
     volume_participation_rate=0.05,   # cap fills at 5% of bar volume
@@ -168,7 +254,6 @@ broker = SimulatedBroker(
 ```python
 from execution.paper_broker import PaperBroker
 
-# Partial fill simulation (off by default for backward compat)
 broker = PaperBroker(
     partial_fill_mode=True,
     volume_participation_rate=0.05,
@@ -183,16 +268,22 @@ fill = broker.submit_order(order)
 
 ```python
 from features.pipeline import FeaturePipeline
-from data.schemas import OrderBook
 
 pipeline = FeaturePipeline(store=store, order_book=live_book)
-# — OR update the snapshot dynamically:
-pipeline.set_order_book(latest_order_book)
-
+pipeline.set_order_book(latest_order_book)   # update snapshot dynamically
 features = pipeline.build("AAPL", start, end)
 # features["order_book_imbalance"] ∈ [-1, +1]
-# NaN when no order book snapshot is set (e.g. during backtesting)
+# NaN when no order book snapshot is available (e.g. during backtesting)
 ```
+
+## Known fixes applied
+
+| File | Issue | Fix |
+|------|-------|-----|
+| `data/feeds/yfinance_feed.py` | `multi_level_column` kwarg removed in yfinance ≥ 0.2.31 | Introspect signature at runtime; flatten MultiIndex columns |
+| `data/feeds/alpaca_feed.py` | `stream.run()` conflicts with running asyncio event loop | Run stream in `ThreadPoolExecutor`; use `run_coroutine_threadsafe` for queue |
+| `backtesting/metrics.py` | CAGR computed from unsorted timestamps; `datetime.now()` seed skewed duration | Sort timestamps before computing `n_calendar_days` |
+| `api/main.py` | `StatArbStrategy` called with `tickers=` but constructor requires `pairs=` | Separate StatArb from generic strategy loop; construct with `pairs=` |
 
 ## mypy status
 

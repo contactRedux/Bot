@@ -1,21 +1,25 @@
 # Algorithmic Trading Platform
 
-A full-stack algorithmic AI trading platform for US equities and crypto, built as a Python/TypeScript monorepo. The project combines market data ingestion, feature engineering, machine learning, strategy orchestration, risk controls, backtesting, paper/live execution, and a real-time dashboard in one research-to-execution stack.
+A full-stack algorithmic AI trading platform for US equities and crypto, built as a Python/TypeScript monorepo. The project combines market data ingestion, feature engineering, machine learning, strategy orchestration, risk controls, backtesting, Bayesian parameter optimisation, walk-forward validation, paper/live execution, and a real-time dashboard in one research-to-execution stack.
 
 ## Purpose
 
-The purpose of this project is to provide a single platform where quant research, model development, strategy evaluation, risk control, and operator visibility all live in the same system. Instead of splitting research notebooks, broker scripts, dashboards, and risk checks across disconnected tools, this codebase aims to provide one coherent trading platform that can evolve toward a high-grade algorithmic AI trading bot.
+The purpose of this project is to provide a single platform where quant research, model development, strategy evaluation, risk control, and operator visibility all live in the same system. Instead of splitting research notebooks, broker scripts, dashboards, and risk checks across disconnected tools, this codebase provides one coherent trading platform that can evolve toward a high-grade algorithmic AI trading bot.
 
 ## Problems This Project Solves
 
 - Reduces fragmentation between research, execution, and monitoring workflows
-- Standardizes market data ingestion across multiple providers and asset classes
+- Standardises market data ingestion across multiple providers and asset classes
 - Converts raw market, news, and macro inputs into a reusable feature pipeline
 - Makes strategy comparison easier through a shared backtesting and walk-forward framework
-- Applies centralized risk controls before orders reach execution
+- Finds optimal strategy parameters using Bayesian search (Optuna TPE) instead of grid search
+- Validates strategies on truly unseen data with expanding-window walk-forward OOS testing
+- Applies centralised risk controls before orders reach execution
 - Supports safe progression from development to paper trading to live trading
 - Gives operators a dashboard for signals, risk, portfolio state, and execution visibility
 - Creates a path for institutional upgrades such as Bloomberg integration, cloud deployment, stronger auth, and reproducible infrastructure
+
+---
 
 ## Current Platform Capabilities
 
@@ -23,24 +27,29 @@ The purpose of this project is to provide a single platform where quant research
 
 - Multi-source data layer with 9 feed adapters: Alpaca, Binance, Bloomberg, CoinGecko, yfinance, NewsAPI, GDELT, Alpha Vantage, and SEC EDGAR
 - Bloomberg B-PIPE adapter fully implemented (`data/feeds/bloomberg_feed.py`) with graceful `blpapi`-absent startup; feed priority policy and sentiment quality weights in place
-- Feature pipeline with 40+ technical indicators, sentiment, macro, statistical features, **and order-book imbalance** (live microstructure feature)
+- Feature pipeline with 40+ technical indicators, sentiment, macro, statistical features, and order-book imbalance (live microstructure feature)
 - ML stack including LSTM, Transformer, Gaussian Process, LightGBM, PPO RL, and ensemble models
-- Six implemented strategy families: momentum, mean reversion, statistical arbitrage, market making, sentiment/news, macro factor
-- Event-driven backtester with metrics, reporting, and walk-forward model validation; **partial fill model**, **square-root market impact slippage**, and **fee/funding hooks** for execution realism
+- **Nine implemented strategy families:** momentum, mean reversion, statistical arbitrage (Engle-Granger pairs), market making (Avellaneda-Stoikov), news sentiment, macro factor, **Kalman filter trend**, **Kelly criterion + volatility targeting**, **VWAP mean reversion**
+- Event-driven backtester with metrics (Sharpe, Sortino, Calmar, CAGR, max drawdown, profit factor), reporting, partial fill model, square-root market impact slippage, and fee/funding hooks
+- **Bayesian hyperparameter optimiser** (`backtesting/optimizer.py`) — Optuna TPE with predefined search spaces for all 5 tuneable strategies; objectives: Sharpe / Sortino / Calmar / total return
+- **Walk-forward out-of-sample validation** (`backtesting/walkforward.py`) — expanding-window fold structure; per-fold and aggregate metrics
 - Risk engine covering VaR, CVaR, drawdown monitoring, daily loss controls, and correlation-aware scaling
-- Execution layer: `PaperBroker` (with optional partial-fill mode), `AlpacaBroker`, `BinanceBroker`
+- Execution layer: `PaperBroker` (with optional partial-fill mode), `AlpacaBroker`, `BinanceBroker`; Alpaca stream fixed to run in a thread executor (no event-loop conflict)
 - FastAPI REST API and WebSocket feed; localhost-only binding; OIDC Bearer auth seam for production; RBAC on all mutation endpoints
 - AWS Terraform IaC baseline (11 `.tf` files: VPC, ECR, ECS Fargate, RDS PG16, S3, Secrets Manager, IAM, CloudWatch)
 - Incremental `mypy` hardening — 0 errors on `api/`, `config/settings.py`, `data/store.py`, `execution/base.py`, `strategies/base.py`
 
 ### Frontend (`packages/dashboard`)
 
-- React + TypeScript dashboard with pages for overview, backtest exploration, live monitoring, news, and risk
-- Overview page fetches live OHLCV data from `GET /api/portfolio/price-history` via TanStack React Query (60 s refresh)
-- Zustand stores for signals, portfolio, fills, risk state, and WebSocket status
-- Auto-reconnect WebSocket hook for real-time updates
-- Recharts-based visualizations for portfolio and market/operator views
-- Typed API client and strict TypeScript configuration
+- React + TypeScript dashboard with pages for Overview, Backtest Explorer, Live Monitor, News Feed, Risk Dashboard, and Strategy Manager
+- **Backtest Explorer** has three panels: standard backtest, **Bayesian optimisation** (trial value chart + best-param chips), and **walk-forward validation** (per-fold table + aggregate mean±std grid)
+- **Strategy Manager** (`/strategies`) — live engine control (start/stop), trading mode badge, per-strategy enable/disable toggles, loop counter
+- Overview page fetches live OHLCV data via TanStack React Query (60 s refresh)
+- Zustand stores for signals, portfolio, fills, risk state, news articles, WebSocket status, and trading engine state
+- Auto-reconnect WebSocket hook; seeds news and trading status from REST on reconnect
+- NavBar shows live engine state indicator (TRADING·PAPER / ENGINE IDLE) and WS connection dot
+- Recharts-based visualisations for equity curves, risk metrics, and optimisation trial values
+- Typed API client and strict TypeScript configuration; `npx tsc --noEmit` → clean
 
 ### Quality and testing
 
@@ -53,7 +62,7 @@ The purpose of this project is to provide a single platform where quant research
 
 - `mypy` → **0 errors** on all targeted API + store + execution modules
 - `ruff` → **0 errors** on all touched files
-- Frontend `npm run lint && npm run build` → **clean**
+- Frontend `npx tsc --noEmit` → **clean**
 - Playwright E2E suite scaffolded (`make test-e2e`, requires `make dev` first)
 
 ---
@@ -67,22 +76,36 @@ algo-trading/
 │   │   ├── data/             9 feed adapters (Alpaca, Binance, Bloomberg, NewsAPI, …)
 │   │   ├── features/         40+ indicators + NLP + macro + order-book imbalance
 │   │   ├── models/           LSTM · Transformer · GP · LightGBM · PPO RL · Ensemble
-│   │   ├── strategies/       6 strategy classes + StrategyOrchestrator
+│   │   ├── strategies/       9 strategy classes + StrategyOrchestrator
+│   │   │   ├── momentum.py           LSTM+Transformer ensemble trend following
+│   │   │   ├── mean_reversion.py     Bollinger Band z-score + ATR stops
+│   │   │   ├── stat_arb.py           Engle-Granger cointegration pairs trading
+│   │   │   ├── market_making.py      Avellaneda-Stoikov RL-adjusted quotes
+│   │   │   ├── sentiment.py          FinBERT news sentiment z-score
+│   │   │   ├── macro_factor.py       VIX regime + yield-curve + earnings surprise
+│   │   │   ├── kalman_trend.py       1D Kalman filter — trades normalised innovation
+│   │   │   ├── kelly_vol.py          Fractional Kelly + vol targeting (Moreira & Muir)
+│   │   │   └── vwap_reversion.py     VWAP deviation + ATR/volume confirmation
 │   │   ├── backtesting/      Event-driven BacktestEngine + partial fills + sqrt slippage
+│   │   │   ├── engine.py             Main simulation loop (look-ahead safe)
+│   │   │   ├── optimizer.py          Bayesian HPO via Optuna TPE
+│   │   │   ├── walkforward.py        Expanding-window OOS validation
+│   │   │   └── metrics.py            Sharpe · Sortino · Calmar · CAGR · max drawdown
 │   │   ├── risk/             RiskManager · VaR/CVaR · DrawdownMonitor
 │   │   ├── execution/        PaperBroker (partial mode) · AlpacaBroker · BinanceBroker
 │   │   ├── api/              FastAPI REST + WebSocket /ws/feed
+│   │   │   └── routes/       backtest · news · optimize · portfolio · risk · signals
+│   │   │                     strategies · trading
 │   │   ├── config/           pydantic-settings · strategy YAML · structlog
 │   │   ├── infra/terraform/  11 .tf files — full AWS IaC baseline
 │   │   └── docs/concepts/    Learning guides for every concept
 │   └── dashboard/            React + TypeScript + Vite + Tailwind
-│       ├── playwright.config.ts  E2E test config (Chromium)
 │       └── src/
 │           ├── components/   PriceChart · PortfolioSummary · SignalTable · RiskPanel …
 │           ├── hooks/        useWebSocketFeed (auto-reconnect)
 │           ├── lib/          Typed API client + shared types
-│           ├── pages/        Overview · Backtest · Live · News · Risk
-│           └── store/        Zustand slices (signals, portfolio, risk, fills)
+│           ├── pages/        Overview · Backtest · Live · News · Risk · Strategies
+│           └── store/        Zustand (signals · portfolio · risk · fills · news · trading)
 ├── .env.example              All environment variables documented
 ├── Makefile                  make dev / test / test-integration / test-e2e / backtest / lint
 └── README.md                 ← you are here
@@ -91,11 +114,11 @@ algo-trading/
 **Data flow:**
 ```
 Bloomberg / Alpaca / Binance / NewsAPI / yfinance
-        ↓  data/feeds/
+        ↓  data/feeds/  (DataPipeline — APScheduler, backfill + streaming)
    DataStore (SQLite → PostgreSQL on AWS)
         ↓  features/pipeline.py
-   Feature matrix (OHLCV + 40 indicators + sentiment + macro + order-book imbalance)
-        ↓  models/  +  strategies/
+   Feature matrix (OHLCV + 40+ indicators + sentiment + macro + order-book imbalance)
+        ↓  models/  +  strategies/  (9 strategy classes)
    Aggregated orders (StrategyOrchestrator)
         ↓  risk/manager.py
    Risk-gated orders (APPROVE / SCALE_DOWN / REJECT)
@@ -103,6 +126,9 @@ Bloomberg / Alpaca / Binance / NewsAPI / yfinance
    Paper fills (optional partial-fill mode)  OR  Alpaca/Binance live orders
         ↓  api/ws/feed.py
    React Dashboard  (real-time WebSocket)
+
+Offline / research path:
+   BacktestEngine → Optimizer (Optuna TPE) → WalkForwardBacktest → metrics report
 ```
 
 ---
@@ -132,52 +158,130 @@ make install
 
 This runs `pip install -e ".[data,ml,api,dev]"` in the quant-engine package and `npm install` in the dashboard.
 
-### 3. Start the backend API server
-
-```bash
-make api
-# → FastAPI server at http://127.0.0.1:8000  (localhost only — not exposed on LAN)
-# → Swagger docs at http://127.0.0.1:8000/docs
-```
-
-> **Security note:** The API binds to `127.0.0.1` (loopback only) by default.
-> Never use `--host 0.0.0.0` in development — it exposes the unauthenticated
-> control-plane endpoints on all network interfaces.  In production, place the
-> API behind a reverse proxy (AWS ALB/nginx) and set `OIDC_ISSUER_URL` to
-> require Bearer token authentication on mutation endpoints.
-
-### 4. Start the dashboard
+### 3. Start everything
 
 ```bash
 make dev
-# → React dev server at http://localhost:5173
+# → FastAPI server at  http://127.0.0.1:8000  (localhost only)
+# → Swagger docs at    http://127.0.0.1:8000/docs
+# → Dashboard at       http://localhost:5173
 ```
+
+> **Security note:** The API binds to `127.0.0.1` (loopback only) by default.
+> Never use `--host 0.0.0.0` in development — it exposes unauthenticated
+> control-plane endpoints on all network interfaces. In production, place the
+> API behind a reverse proxy (AWS ALB/nginx) and set `OIDC_ISSUER_URL` to
+> require Bearer token authentication on mutation endpoints.
 
 ---
 
 ## Running a Backtest
+
+**Via Dashboard:**
+
+Open the **Backtest** page (`/backtest`), fill in tickers, date range, and strategies, then choose one of three modes:
+
+| Panel | What it does |
+|-------|-------------|
+| **Run Backtest** | Standard single-run simulation with equity curve + trade log |
+| **Bayesian Optimisation** | Finds best parameters for a strategy using Optuna TPE (5–200 trials) |
+| **Walk-Forward Validation** | Expanding-window OOS test across N folds — the proper overfitting check |
+
+**Via API:**
+
+```bash
+# Standard backtest
+curl -X POST http://127.0.0.1:8000/api/backtest/run \
+  -H "Content-Type: application/json" \
+  -d '{"tickers":["AAPL","MSFT"],"strategies":["momentum","kalman_trend"],"start_date":"2022-01-01","end_date":"2025-01-01","initial_capital":100000,"interval":"1d"}'
+
+# Bayesian optimisation (40 trials, maximise Sharpe)
+curl -X POST http://127.0.0.1:8000/api/optimize/run \
+  -H "Content-Type: application/json" \
+  -d '{"strategy":"kalman_trend","tickers":["AAPL","NVDA"],"start_date":"2022-01-01","end_date":"2025-01-01","n_trials":40,"objective":"sharpe"}'
+
+# Walk-forward validation
+curl -X POST http://127.0.0.1:8000/api/backtest/walkforward \
+  -H "Content-Type: application/json" \
+  -d '{"tickers":["AAPL","MSFT","NVDA"],"strategies":["momentum","vwap_reversion"],"start_date":"2020-01-01","end_date":"2025-01-01","n_splits":4,"oos_size_days":252}'
+```
 
 **Via CLI:**
 
 ```bash
 cd packages/quant-engine
 python -m backtesting.runner \
-  --tickers AAPL MSFT \
-  --strategies momentum mean_reversion \
+  --tickers AAPL MSFT NVDA \
+  --strategies momentum mean_reversion kalman_trend \
   --start 2022-01-01 \
-  --end 2024-01-01 \
+  --end 2025-01-01 \
   --capital 100000 \
   --output backtest_results.json
 ```
 
-**Via Dashboard:**
+---
 
-Open the **Backtest** page, select tickers and strategies, set date range and capital, click **Run Backtest**.
+## Strategy Reference
 
-**Via Makefile:**
+| Strategy | Class | Signal logic | Best market regime |
+|----------|-------|-------------|-------------------|
+| Momentum | `MomentumStrategy` | LSTM+Transformer ensemble signal; ADX filter | Trending |
+| Mean Reversion | `MeanReversionStrategy` | Bollinger Band z-score; ATR stop | Ranging |
+| Stat Arb | `StatArbStrategy` | Engle-Granger cointegration; spread z-score; OU half-life filter | Low-correlation pairs |
+| Market Making | `MarketMakingStrategy` | Avellaneda-Stoikov RL-adjusted bid/ask quotes; inventory skew | High-volume, tight spreads |
+| Sentiment | `SentimentStrategy` | FinBERT article sentiment z-score; decay weighting | Event-driven |
+| Macro Factor | `MacroFactorStrategy` | VIX regime × yield curve × earnings surprise multipliers | Regime-change |
+| **Kalman Trend** | `KalmanTrendStrategy` | 1D Kalman filter; trades normalised innovation `ν/√S` | Any trending |
+| **Kelly + Vol Target** | `KellyVolStrategy` | Fractional Kelly sizing; vol targeting scales position by σ_target/σ_realised | Low-vol regimes |
+| **VWAP Reversion** | `VWAPReversionStrategy` | VWAP deviation %; ATR volatility filter; volume confirmation | Intraday / institutional |
 
-```bash
-make backtest
+All strategies are configurable via `config/strategy_config.yaml` and toggleable at runtime via `PATCH /api/strategies/{id}` or the `/strategies` dashboard page.
+
+---
+
+## Parameter Tuning
+
+The optimizer uses **Optuna TPE** (Tree-structured Parzen Estimator) — a Bayesian sequential model-based method that samples the most promising parameter region at each trial based on previous results. It is 10–20× more sample-efficient than grid search.
+
+```python
+from backtesting.optimizer import StrategyOptimizer
+from strategies.kalman_trend import KalmanTrendStrategy
+from strategies.orchestrator import StrategyOrchestrator
+
+def strategy_factory(trial):
+    cfg = StrategyOptimizer.kalman_trend_space(trial)
+    cfg["enabled"] = True
+    return KalmanTrendStrategy(config=cfg, tickers=["AAPL", "NVDA"])
+
+optimizer = StrategyOptimizer(
+    bars=bars_dict,          # dict[str, list[OHLCVBar]]
+    strategy_factory=strategy_factory,
+    orchestrator_factory=lambda strats: StrategyOrchestrator(strategies=strats, config={}),
+    n_trials=50,
+    objective="sharpe",      # sharpe | sortino | calmar | total_return
+)
+result = optimizer.run()
+print(result.best_params)   # {'observation_noise': 0.82, 'process_noise': 0.03, ...}
+print(result.best_value)    # 1.743
+```
+
+**Pre-defined search spaces:** `momentum_space`, `mean_reversion_space`, `kelly_vol_space`, `kalman_trend_space`, `vwap_reversion_space`.
+
+**Walk-forward usage:**
+
+```python
+from backtesting.walkforward import WalkForwardBacktest
+
+wfb = WalkForwardBacktest(
+    bars=bars_dict,
+    orchestrator_factory=make_orchestrator,   # called fresh each fold
+    n_splits=4,
+    oos_size_days=252,   # 1 trading year per fold
+    min_train_days=365,
+)
+results = wfb.run()
+print(results.aggregate_metrics())
+# {'sharpe_ratio': {'mean': 0.92, 'std': 0.34, 'min': 0.45, 'max': 1.37}, ...}
 ```
 
 ---
@@ -201,47 +305,38 @@ Tests are split because LightGBM and PyTorch share conflicting OpenMP libraries 
 Edit `.env`:
 
 ```bash
-# Development (no real data, no live orders)
+# Development (no real data, no live orders, PaperBroker)
 TRADING_MODE=dev
 
-# Paper trading (real data, simulated orders)
+# Paper trading (real Alpaca market data, simulated fills — auto-starts engine)
 TRADING_MODE=paper
 ALPACA_API_KEY=your_paper_key
 ALPACA_SECRET_KEY=your_paper_secret
+ALPACA_BASE_URL=https://paper-api.alpaca.markets
 
 # Live trading (REAL ORDERS — use with extreme caution)
 TRADING_MODE=live
 ALPACA_API_KEY=your_live_key
 ALPACA_SECRET_KEY=your_live_secret
+ALPACA_BASE_URL=https://api.alpaca.markets
 ```
 
-`BrokerFactory` will **refuse to start** in live mode without both API keys set — this is an intentional safety guard.
+`BrokerFactory` will **refuse to start** in `live` mode without both API keys set — intentional safety guard.
+
+In `paper` and `live` modes the `TradingEngine` **auto-starts** on API boot. Use the `/strategies` dashboard page or `POST /api/trading/start|stop` to control it at runtime.
 
 ---
 
 ## Bloomberg Configuration
 
-Bloomberg provides institutional-quality market data and is used as the **anchor** source. Free sources (yfinance, Alpha Vantage, NewsAPI) remain fully active as fallbacks.
+Bloomberg provides institutional-quality market data and is used as the **anchor** source when available. Free sources (yfinance, Alpha Vantage, NewsAPI, GDELT) remain active as fallbacks.
 
 ```bash
 # .env
 BLOOMBERG_APP_NAME=your_app_name   # from Bloomberg Desktop or B-PIPE
 ```
 
-If `BLOOMBERG_APP_NAME` is unset, the system runs entirely on free sources with no architecture change. The Bloomberg feed adapter (`data/feeds/bloomberg_feed.py`) uses an optional `blpapi` import — startup is always clean even when the library is not installed.
-
----
-
-## AWS Configuration
-
-```bash
-# .env
-AWS_REGION=us-east-1
-AWS_ACCOUNT_ID=123456789012
-S3_BUCKET_NAME=my-algo-trading-bucket
-```
-
-When these are set, the model registry uses S3 for artifact storage and backtest reports are persisted to S3. The database URL is overridden with RDS when deploying to ECS. See [`docs/concepts/aws_cloud.md`](packages/quant-engine/docs/concepts/aws_cloud.md) for the full deployment guide.
+If `BLOOMBERG_APP_NAME` is unset the system runs entirely on free sources with no architecture change.
 
 ---
 
@@ -249,65 +344,21 @@ When these are set, the model registry uses S3 for artifact storage and backtest
 
 The full AWS infrastructure baseline lives in [`infra/terraform/`](infra/terraform). It provisions:
 
-- **VPC** with public + private subnets across 2 AZs, NAT gateway for private-subnet egress
-- **ECR** repository for the quant-engine Docker image (scan-on-push, immutable tags)
-- **ECS Fargate** cluster + service running the quant-engine API as a non-root container (UID 1001, read-only rootfs, drop ALL caps)
-- **RDS PostgreSQL 16** in private subnets, encrypted, deletion-protected, with automated backups
-- **S3** artifacts bucket (AES-256 encrypted, versioned, lifecycle archival to Glacier)
-- **Secrets Manager** for all API keys and the database URL — never stored in task definitions
-- **IAM** execution + task roles with least-privilege policies
-- **CloudWatch** log group with 90-day retention
-
-**Prerequisites:** [Terraform ≥ 1.7](https://developer.hashicorp.com/terraform/install) installed locally.
+- **VPC** with public + private subnets across 2 AZs, NAT gateway
+- **ECR** repository (scan-on-push, immutable tags)
+- **ECS Fargate** — non-root (UID 1001), read-only rootfs, drop ALL capabilities
+- **RDS PostgreSQL 16** in private subnets, encrypted, deletion-protected
+- **S3** artifacts bucket (AES-256, versioned, Glacier lifecycle)
+- **Secrets Manager** for all API keys — never in task definition plaintext
+- **IAM** least-privilege execution + task roles
+- **CloudWatch** log group, 90-day retention
 
 ```bash
 cd infra/terraform
-
-# 1. Create a terraform.tfvars file (never commit this):
-cat > terraform.tfvars <<EOF
-aws_account_id      = "123456789012"
-s3_bucket_name      = "my-algo-trading-artifacts"
-db_password         = "choose-a-strong-password"
-container_image_tag = "latest"
-EOF
-
-# 2. Initialise, validate, and plan
-terraform init
-terraform validate
-terraform fmt -check
-terraform plan
-
-# 3. Apply (creates all AWS resources)
+cp terraform.tfvars.example terraform.tfvars  # fill in account_id, db_password, etc.
+terraform init && terraform validate && terraform plan
 terraform apply
-
-# 4. After first apply — populate secrets with real values:
-aws secretsmanager put-secret-value \
-  --secret-id algo-trading-prod/api-keys \
-  --secret-string '{"alpaca_api_key":"...","alpaca_secret_key":"...","newsapi_key":"..."}'
 ```
-
-> **Security note:** The ECS task runs as UID 1001 (non-root), with a read-only root filesystem
-> and all Linux capabilities dropped. Secrets are injected from Secrets Manager at runtime —
-> no API keys appear in task definition plaintext.
-
----
-
-## Concept Documentation
-
-All theoretical concepts are documented with formulas, code examples, and cross-links to the implementing files:
-
-| Document | Topics |
-|----------|--------|
-| [`docs/concepts/cointegration.md`](packages/quant-engine/docs/concepts/cointegration.md) | Cointegration, Engle-Granger, Ornstein-Uhlenbeck, pairs trading |
-| [`docs/concepts/market_making.md`](packages/quant-engine/docs/concepts/market_making.md) | Bid-ask spread, inventory risk, Avellaneda-Stoikov model |
-| [`docs/concepts/reinforcement_learning.md`](packages/quant-engine/docs/concepts/reinforcement_learning.md) | MDPs, Bellman equation, PPO, reward shaping |
-| [`docs/concepts/risk_metrics.md`](packages/quant-engine/docs/concepts/risk_metrics.md) | VaR, CVaR, Sharpe, Sortino, Calmar, max drawdown, Ulcer Index |
-| [`docs/concepts/sentiment_nlp.md`](packages/quant-engine/docs/concepts/sentiment_nlp.md) | Transformers, BERT, FinBERT, sentiment aggregation |
-| [`docs/concepts/technical_indicators.md`](packages/quant-engine/docs/concepts/technical_indicators.md) | RSI, MACD, ADX, Bollinger Bands, VWAP, Ichimoku, ATR |
-| [`docs/concepts/gaussian_process.md`](packages/quant-engine/docs/concepts/gaussian_process.md) | GP prior/posterior, kernels, uncertainty quantification |
-| [`docs/concepts/macro_regimes.md`](packages/quant-engine/docs/concepts/macro_regimes.md) | VIX, yield curve, USD momentum, PEAD, regime multipliers |
-| [`docs/concepts/aws_cloud.md`](packages/quant-engine/docs/concepts/aws_cloud.md) | S3, RDS, ECS Fargate, Secrets Manager, CloudWatch, Terraform IaC |
-| [`risk/README.md`](packages/quant-engine/risk/README.md) | Operational risk management reference |
 
 ---
 
@@ -321,19 +372,21 @@ All variables are documented in [`.env.example`](.env.example). Key variables:
 | `DATABASE_URL` | Always | SQLite (dev) or PostgreSQL (prod) |
 | `ALPACA_API_KEY` | Paper/live equities | Alpaca key |
 | `ALPACA_SECRET_KEY` | Paper/live equities | Alpaca secret |
+| `ALPACA_BASE_URL` | Paper/live | `https://paper-api.alpaca.markets` or live URL |
 | `BINANCE_API_KEY` | Live crypto | Binance key |
 | `BINANCE_SECRET_KEY` | Live crypto | Binance secret |
 | `NEWSAPI_KEY` | News sentiment | NewsAPI key |
+| `FMP_API_KEY` | Earnings / press releases | Financial Modeling Prep key |
 | `ALPHA_VANTAGE_KEY` | Fundamentals | Alpha Vantage key |
-| `BLOOMBERG_APP_NAME` | Bloomberg data | B-PIPE app name (optional — system runs without it) |
+| `POLYGON_KEY` | Tick data | Polygon.io key |
+| `BLOOMBERG_APP_NAME` | Bloomberg data | B-PIPE app name (optional) |
 | `AWS_REGION` | Cloud deployment | AWS region |
 | `AWS_ACCOUNT_ID` | Cloud deployment | AWS account |
 | `S3_BUCKET_NAME` | Model/report storage | S3 bucket |
 | `OIDC_ISSUER_URL` | Production auth | OIDC issuer URL for JWT validation |
 | `OIDC_AUDIENCE` | Production auth | Expected JWT audience claim |
-| `API_REQUIRED_ROLE` | Production auth | Role required for control-plane endpoints (default: `operator`) |
-| `AWS_SECRETS_PREFIX` | Cloud deployment | Prefix for AWS Secrets Manager secret names |
-| `VITE_API_BASE_URL` | Dashboard | Backend API URL |
+| `API_REQUIRED_ROLE` | Production auth | Role required for mutation endpoints (default: `operator`) |
+| `VITE_API_BASE_URL` | Dashboard | Backend API URL (default: `http://localhost:8000`) |
 | `VITE_WS_URL` | Dashboard | WebSocket feed URL |
 
 ---
@@ -354,3 +407,22 @@ make backtest           # run example backtest via CLI runner
 make lint               # ruff (Python) + eslint (TypeScript)
 make fmt                # ruff format (Python) + prettier (TypeScript)
 ```
+
+---
+
+## Concept Documentation
+
+All theoretical concepts are documented with formulas, code examples, and cross-links:
+
+| Document | Topics |
+|----------|--------|
+| [`docs/concepts/cointegration.md`](packages/quant-engine/docs/concepts/cointegration.md) | Cointegration, Engle-Granger, Ornstein-Uhlenbeck, pairs trading |
+| [`docs/concepts/market_making.md`](packages/quant-engine/docs/concepts/market_making.md) | Bid-ask spread, inventory risk, Avellaneda-Stoikov model |
+| [`docs/concepts/reinforcement_learning.md`](packages/quant-engine/docs/concepts/reinforcement_learning.md) | MDPs, Bellman equation, PPO, reward shaping |
+| [`docs/concepts/risk_metrics.md`](packages/quant-engine/docs/concepts/risk_metrics.md) | VaR, CVaR, Sharpe, Sortino, Calmar, max drawdown |
+| [`docs/concepts/sentiment_nlp.md`](packages/quant-engine/docs/concepts/sentiment_nlp.md) | Transformers, BERT, FinBERT, sentiment aggregation |
+| [`docs/concepts/technical_indicators.md`](packages/quant-engine/docs/concepts/technical_indicators.md) | RSI, MACD, ADX, Bollinger Bands, VWAP, ATR |
+| [`docs/concepts/gaussian_process.md`](packages/quant-engine/docs/concepts/gaussian_process.md) | GP prior/posterior, kernels, uncertainty quantification |
+| [`docs/concepts/macro_regimes.md`](packages/quant-engine/docs/concepts/macro_regimes.md) | VIX, yield curve, USD momentum, PEAD, regime multipliers |
+| [`docs/concepts/aws_cloud.md`](packages/quant-engine/docs/concepts/aws_cloud.md) | S3, RDS, ECS Fargate, Secrets Manager, CloudWatch, Terraform IaC |
+| [`risk/README.md`](packages/quant-engine/risk/README.md) | Operational risk management reference |
