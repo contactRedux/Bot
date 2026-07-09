@@ -115,6 +115,13 @@ def _run_optimize(req: OptimizeRequest, run_id: str, state: AppState) -> None:
                 bars[t] = b
 
         if not bars:
+            _intraday_limits = {"1m": 7, "2m": 60, "5m": 60, "15m": 60, "30m": 60, "60m": 730, "1h": 730, "90m": 60}
+            days_limit = _intraday_limits.get(req.interval)
+            if days_limit is not None and (end - start).days > days_limit:
+                raise ValueError(
+                    f"yfinance only supports '{req.interval}' data for the past {days_limit} days. "
+                    f"Use interval '1d' for multi-year optimisations, or shorten the date range."
+                )
             raise ValueError("No bars fetched — check tickers and date range")
 
         # Resolve strategy class
@@ -202,7 +209,14 @@ def _run_walkforward(req: WalkForwardRequest, run_id: str, state: AppState) -> N
                 bars[t] = b
 
         if not bars:
-            raise ValueError("No bars fetched")
+            _intraday_limits = {"1m": 7, "2m": 60, "5m": 60, "15m": 60, "30m": 60, "60m": 730, "1h": 730, "90m": 60}
+            days_limit = _intraday_limits.get(req.interval)
+            if days_limit is not None and (end - start).days > days_limit:
+                raise ValueError(
+                    f"yfinance only supports '{req.interval}' data for the past {days_limit} days. "
+                    f"Use interval '1d' for multi-year walk-forward tests, or shorten the date range."
+                )
+            raise ValueError("No bars fetched — check tickers and date range")
 
         requested = set(req.strategies)
 

@@ -7,6 +7,7 @@ import { useWsStore, useTradingStore } from "@/store";
  */
 const links = [
   { to: "/", label: "Overview" },
+  { to: "/chart", label: "Charts" },
   { to: "/live", label: "Live" },
   { to: "/strategies", label: "Strategies" },
   { to: "/backtest", label: "Backtest" },

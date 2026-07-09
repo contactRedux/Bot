@@ -47,7 +47,16 @@ const OPTIMIZABLE_STRATEGIES = [
   "vwap_reversion",
 ];
 
-const INTERVALS = ["1d", "1h", "15m"];
+// yfinance max history per interval (calendar days)
+const INTERVAL_MAX_DAYS: Record<string, number> = {
+  "1d":  3650, // ~10 years
+  "1h":  730,
+  "15m": 60,
+  "5m":  60,
+  "1m":  7,
+};
+
+const INTERVALS = ["1d", "1h", "15m", "5m", "1m"];
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -317,12 +326,29 @@ export default function BacktestExplorer() {
             >
               {INTERVALS.map((i) => (
                 <option key={i} value={i}>
-                  {i}
+                  {i}{INTERVAL_MAX_DAYS[i] < 3650 ? ` (last ${INTERVAL_MAX_DAYS[i]}d max)` : ""}
                 </option>
               ))}
             </select>
           </div>
         </div>
+
+        {/* Interval + date range compatibility warning */}
+        {(() => {
+          const maxDays = INTERVAL_MAX_DAYS[interval];
+          if (!maxDays || maxDays >= 3650) return null;
+          const start = new Date(startDate);
+          const end   = new Date(endDate);
+          const rangeDays = (end.getTime() - start.getTime()) / 86_400_000;
+          if (rangeDays <= maxDays) return null;
+          return (
+            <div className="mt-3 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+              ⚠ yfinance only supports <strong>{interval}</strong> bars for the past <strong>{maxDays} days</strong>.
+              Your date range spans ~{Math.round(rangeDays)} days and will return no data.
+              Switch to <strong>1d</strong> interval for multi-year backtests.
+            </div>
+          );
+        })()}
 
         {/* Strategies */}
         <div className="mt-4">

@@ -147,9 +147,9 @@ async def get_price_history(
     Return OHLCV bars for *ticker* from the DataStore formatted for the
     PriceChart component (time + close + optional OHLCV fields).
 
-    The endpoint looks back ``limit`` daily bars from today. If no data is
-    stored yet (empty database in dev mode) it returns an empty ``points``
-    list — the chart renders a "No price data available" placeholder.
+    If no data is found in the DataStore (e.g. the ticker is not in the
+    pipeline's watched universe), falls back to a live yfinance fetch so that
+    arbitrary tickers like AMD, MU, SNDK also display data.
     """
     if not ticker or not ticker.strip():
         raise HTTPException(status_code=422, detail="ticker must not be empty")
@@ -178,6 +178,23 @@ async def get_price_history(
     except Exception:
         logger.exception("price_history.read_bars_failed ticker=%s interval=%s", ticker, interval)
         return PriceHistoryResponse(ticker=ticker, interval=interval, points=[], count=0)
+
+    # If no bars in DB, fall back to a live yfinance fetch so that tickers
+    # outside the pipeline's watched universe (e.g. AMD, MU, SNDK) still work.
+    if not bars:
+        try:
+            import asyncio
+            from data.feeds.yfinance_feed import YFinanceFeed
+            yf = YFinanceFeed()
+            loop = asyncio.get_event_loop()
+            bars = await loop.run_in_executor(
+                None, yf.fetch_bars, ticker, interval, start, end
+            )
+            # Persist for future requests so the next call is instant
+            if bars and store is not None:
+                store.write_bars(bars)
+        except Exception:
+            logger.exception("price_history.yfinance_fallback_failed ticker=%s", ticker)
 
     # Return only the most recent ``limit`` bars
     bars = bars[-limit:]

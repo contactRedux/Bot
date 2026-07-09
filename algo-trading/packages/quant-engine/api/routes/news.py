@@ -70,10 +70,8 @@ async def get_news(
         else:
             label = "neutral"
 
-        # Use the first ticker associated with the article (or "GENERAL")
+        # Use the first ticker stored on the article (or "GENERAL")
         article_ticker = (a.tickers[0] if a.tickers else None) or "GENERAL"
-        if ticker:
-            article_ticker = ticker  # keep the requested filter ticker
 
         result.append({
             "id": a.article_id,
@@ -82,7 +80,7 @@ async def get_news(
             "source": a.source,
             "sentiment_score": round(score, 4),
             "sentiment_label": label,
-            "published_at": a.event_timestamp.isoformat() + "Z",
+            "published_at": a.event_timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "url": a.url,
         })
 

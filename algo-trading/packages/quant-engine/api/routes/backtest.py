@@ -93,6 +93,23 @@ def _run_backtest_sync(
             logger.warning("yfinance download failed (%s); using synthetic bars", exc)
 
         if not raw_bars:
+            # If the user asked for intraday bars over a long date range that
+            # yfinance doesn't support (e.g. 15m over 2 years), explain clearly
+            # rather than silently falling back to synthetic data.
+            _intraday_limits = {"1m": 7, "2m": 60, "5m": 60, "15m": 60, "30m": 60, "60m": 730, "1h": 730, "90m": 60}
+            days_limit = _intraday_limits.get(req.interval)
+            if days_limit is not None:
+                try:
+                    from datetime import timedelta
+                    start_dt = datetime.strptime(req.start_date, "%Y-%m-%d")
+                    end_dt   = datetime.strptime(req.end_date,   "%Y-%m-%d")
+                    if (end_dt - start_dt).days > days_limit:
+                        raise ValueError(
+                            f"yfinance only supports '{req.interval}' data for the past {days_limit} days. "
+                            f"Use interval '1d' for multi-year backtests, or shorten the date range."
+                        )
+                except ValueError:
+                    raise
             # Synthetic fallback for testing without network
             raw_bars = _synthetic_bars(req.tickers, req.start_date, req.end_date)
 

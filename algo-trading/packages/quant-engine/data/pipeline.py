@@ -253,11 +253,17 @@ class DataPipeline:
     def _start_streaming_tasks(self) -> None:
         """Create asyncio tasks for all real-time streaming feeds."""
         if self.equity_tickers:
-            task = asyncio.create_task(
-                self._stream_alpaca_bars(),
-                name="stream_alpaca_bars",
-            )
-            self._streaming_tasks.append(task)
+            if not (settings.alpaca_api_key and settings.alpaca_secret_key):
+                logger.warning(
+                    "pipeline.alpaca_stream.skipped",
+                    reason="ALPACA_API_KEY or ALPACA_SECRET_KEY not configured",
+                )
+            else:
+                task = asyncio.create_task(
+                    self._stream_alpaca_bars(),
+                    name="stream_alpaca_bars",
+                )
+                self._streaming_tasks.append(task)
 
         if self.crypto_tickers:
             task = asyncio.create_task(
@@ -297,6 +303,23 @@ class DataPipeline:
             except asyncio.CancelledError:
                 logger.info("pipeline.alpaca_stream.cancelled")
                 return
+            except ValueError as exc:
+                # auth failed is a permanent error — retrying with the same
+                # credentials will never succeed; stop the task immediately.
+                if "auth" in str(exc).lower():
+                    logger.error(
+                        "pipeline.alpaca_stream.auth_failed",
+                        error=str(exc),
+                        action="stopping stream — check ALPACA_API_KEY / ALPACA_SECRET_KEY",
+                    )
+                    return
+                logger.error(
+                    "pipeline.alpaca_stream.error",
+                    error=str(exc),
+                    retry_in=retry_delay,
+                )
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 60)
             except Exception as exc:
                 logger.error(
                     "pipeline.alpaca_stream.error",

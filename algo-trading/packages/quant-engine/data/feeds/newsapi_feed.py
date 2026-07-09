@@ -146,7 +146,7 @@ class NewsApiFeed(DataFeed):
         seen_ids: set[str] = set()
         articles: list[NewsArticle] = []
 
-        def _parse_articles(raw_articles: list[dict]) -> None:
+        def _parse_articles(raw_articles: list[dict], article_tickers: list[str]) -> None:
             for raw in raw_articles:
                 try:
                     published_at = raw.get("publishedAt", "")
@@ -174,7 +174,7 @@ class NewsApiFeed(DataFeed):
                         url=raw.get("url"),
                         source=self.SOURCE,
                         author=raw.get("author"),
-                        tickers=list(tickers or []),
+                        tickers=article_tickers,
                         event_timestamp=ts,
                         fetch_timestamp=fetch_ts,
                         sentiment_score=None,
@@ -186,7 +186,8 @@ class NewsApiFeed(DataFeed):
                     )
 
         if tickers:
-            # Search for each ticker separately, merge results
+            # Search for each ticker separately so each article is tagged only
+            # with the ticker it was actually fetched for, not all queried tickers.
             for ticker in tickers:
                 logger.info("newsapi.fetch_news", ticker=ticker, max_results=max_results)
                 try:
@@ -198,7 +199,7 @@ class NewsApiFeed(DataFeed):
                         sort_by="publishedAt",
                         page_size=min(max_results, 100),
                     )
-                    _parse_articles(response.get("articles", []))
+                    _parse_articles(response.get("articles", []), [ticker])
                 except Exception as exc:
                     logger.error("newsapi.fetch_news.error", ticker=ticker, error=str(exc))
         else:
@@ -210,7 +211,7 @@ class NewsApiFeed(DataFeed):
                     language="en",
                     page_size=min(max_results, 100),
                 )
-                _parse_articles(response.get("articles", []))
+                _parse_articles(response.get("articles", []), [])
             except Exception as exc:
                 logger.error("newsapi.fetch_top_headlines.error", error=str(exc))
 

@@ -72,7 +72,7 @@ export default function NewsFeed({ limit = 100, ticker }: Props) {
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                     <span className="font-mono text-sky-400">{article.ticker}</span>
                     <span>{article.source}</span>
-                    <span>{new Date(article.published_at).toLocaleString()}</span>
+                    <span>{(() => { try { return new Date(article.published_at).toLocaleString(); } catch { return article.published_at?.slice(0, 16).replace("T", " ") ?? ""; } })()}</span>
                   </div>
                 </div>
                 <div className="shrink-0">

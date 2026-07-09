@@ -236,7 +236,11 @@ class AlpacaFeed(DataFeed):
                 "alpaca-py is not installed.  Run: pip install 'quant-engine[data]'"
             )
 
+        import concurrent.futures as _cf
+
         loop = asyncio.get_event_loop()
+        # Sentinel placed on the queue when the stream thread dies with an error.
+        _error_sentinel: list[Exception] = []
         queue: asyncio.Queue[OHLCVBar] = asyncio.Queue()
 
         async def bar_handler(bar) -> None:
@@ -267,19 +271,67 @@ class AlpacaFeed(DataFeed):
             api_key=self._api_key,
             secret_key=self._secret_key,
         )
+
+        # Patch _start_ws on this instance so that "auth failed" stops the
+        # retry loop immediately.  The library's _run_forever only short-circuits
+        # on "insufficient subscription"; all other ValueErrors — including
+        # "auth failed" — are logged and retried indefinitely.  By setting
+        # _should_run=False here we make the outer while-loop exit cleanly.
+        _original_start_ws = stream._start_ws.__func__
+
+        async def _patched_start_ws(self_stream) -> None:
+            try:
+                await _original_start_ws(self_stream)
+            except ValueError as exc:
+                if "auth" in str(exc).lower():
+                    # Stop the retry loop by clearing the run flag, then
+                    # propagate so the error is surfaced to the thread wrapper.
+                    self_stream._should_run = False
+                raise
+
+        import types
+        stream._start_ws = types.MethodType(_patched_start_ws, stream)
+
+        def _run_and_signal() -> None:
+            """Run stream.run(); on any exception push it onto _error_sentinel.
+
+            The alpaca-py library logs every ValueError via log.exception before
+            we can intercept it.  We silence that logger for the duration of the
+            run so that auth failures don't produce noisy tracebacks — our own
+            structured logger emits the single error line that matters.
+            """
+            import logging as _logging
+            _alpaca_ws_logger = _logging.getLogger("alpaca.data.live.websocket")
+            _prev_level = _alpaca_ws_logger.level
+            _alpaca_ws_logger.setLevel(_logging.CRITICAL)
+            try:
+                stream.run()
+            except Exception as exc:
+                _error_sentinel.append(exc)
+                asyncio.run_coroutine_threadsafe(
+                    queue.put(None),  # type: ignore[arg-type]  # wakes queue.get()
+                    loop,
+                )
+            finally:
+                _alpaca_ws_logger.setLevel(_prev_level)
+
         stream.subscribe_bars(bar_handler, *tickers)
 
         # alpaca-py's stream.run() calls loop.run_until_complete() internally,
         # which conflicts with our already-running asyncio event loop.
         # Run it in a thread executor so it gets its own blocking call.
-        import concurrent.futures as _cf
         executor = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="alpaca_stream")
-        stream_future = loop.run_in_executor(executor, stream.run)
+        executor.submit(_run_and_signal)
         logger.info("alpaca.stream_bars.started", tickers=tickers)
 
         try:
             while True:
                 bar = await queue.get()
+                # None is the error/stop sentinel put by _run_and_signal
+                if bar is None:
+                    if _error_sentinel:
+                        raise _error_sentinel[0]
+                    return
                 yield bar
         finally:
             try:

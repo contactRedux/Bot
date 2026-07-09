@@ -105,11 +105,20 @@ def _make_article_id(source: str, title: str, published_at: str) -> str:
 
 
 def _parse_gdelt_datetime(dt_str: str) -> datetime | None:
-    """Parse GDELT's ``YYYYMMDDHHMMSS`` format into a UTC datetime."""
-    try:
-        return datetime.strptime(dt_str, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
-    except (ValueError, TypeError):
+    """Parse GDELT datetime strings into a UTC datetime.
+
+    GDELT returns dates in two formats depending on the API endpoint:
+    - ``YYYYMMDDHHMMSS``       (DOC API artlist, no separators)
+    - ``YYYYMMDDTHHMMSSZ``     (some GKG fields, compact ISO with T and Z)
+    """
+    if not dt_str:
         return None
+    for fmt in ("%Y%m%d%H%M%S", "%Y%m%dT%H%M%SZ", "%Y-%m-%dT%H:%M:%SZ"):
+        try:
+            return datetime.strptime(dt_str, fmt).replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            continue
+    return None
 
 
 class GdeltFeed(DataFeed):
@@ -244,9 +253,20 @@ class GdeltFeed(DataFeed):
                     except (TypeError, ValueError):
                         sentiment = None
 
-                # Associate tickers with the article if a ticker keyword search
-                # was used — the association is approximate (keyword match, not NER)
-                article_tickers = list(tickers or [])
+                # Associate only the tickers that appear in the article title
+                # (case-insensitive substring check).  Assigning all queried
+                # tickers to every article (the old behaviour) caused every GDELT
+                # article to show as "AAPL" in the dashboard even when it was
+                # about Amazon.  This is still approximate but far more accurate.
+                if tickers:
+                    title_lower = title.lower()
+                    article_tickers = [t for t in tickers if t.lower() in title_lower]
+                    # Fallback: if none matched, keep the full list so the article
+                    # is still visible (better over-attribution than invisibility)
+                    if not article_tickers:
+                        article_tickers = list(tickers)
+                else:
+                    article_tickers = []
 
                 article = NewsArticle(
                     article_id=article_id,
