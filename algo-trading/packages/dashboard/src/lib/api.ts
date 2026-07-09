@@ -89,6 +89,66 @@ export const toggleStrategy = (
 // Backtest
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// News
+// ---------------------------------------------------------------------------
+
+export interface NewsArticleDTO {
+  id: string;
+  ticker: string;
+  headline: string;
+  source: string;
+  sentiment_score: number;
+  sentiment_label: "positive" | "negative" | "neutral";
+  published_at: string;
+  url: string | null;
+}
+
+export interface NewsResponse {
+  articles: NewsArticleDTO[];
+  count: number;
+}
+
+export const fetchNews = (ticker?: string, limit = 100): Promise<NewsResponse> => {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (ticker) params.set("ticker", ticker);
+  return request<NewsResponse>(`/api/news?${params.toString()}`);
+};
+
+// ---------------------------------------------------------------------------
+// Trading engine control
+// ---------------------------------------------------------------------------
+
+export interface TradingStatusResponse {
+  running: boolean;
+  trading_mode: string;
+  bar_interval: string;
+  tickers: string[];
+  loop_count: number;
+  last_processed: Record<string, string>;
+  portfolio: { cash: number; total_equity: number };
+}
+
+export const fetchTradingStatus = (): Promise<TradingStatusResponse> =>
+  request<TradingStatusResponse>("/api/trading/status");
+
+export const startTrading = (): Promise<{ success: boolean; message: string }> =>
+  request("/api/trading/start", { method: "POST" });
+
+export const stopTrading = (): Promise<{ success: boolean; message: string }> =>
+  request("/api/trading/stop", { method: "POST" });
+
+export const haltTrading = (): Promise<{ success: boolean; message: string }> =>
+  // Halt is triggered by sending a POST to risk/resume won't work for halt —
+  // the monitor fires automatically, but operators can force-halt by calling
+  // stop which stops the engine (no new orders) and separately
+  // we expose a manual flag via trading/stop.
+  stopTrading();
+
+// ---------------------------------------------------------------------------
+// Backtest
+// ---------------------------------------------------------------------------
+
 export const runBacktest = (body: BacktestRequest): Promise<BacktestResponse> =>
   request<BacktestResponse>("/api/backtest/run", {
     method: "POST",

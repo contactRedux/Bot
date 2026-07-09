@@ -51,10 +51,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.deps import AppState
 from api.routes.backtest import router as backtest_router
+from api.routes.news import router as news_router
 from api.routes.portfolio import router as portfolio_router
 from api.routes.risk import router as risk_router
 from api.routes.signals import router as signals_router
 from api.routes.strategies import router as strategies_router
+from api.routes.trading import router as trading_router
 from api.schemas import HealthResponse
 from api.ws.feed import router as ws_router
 
@@ -120,6 +122,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("Broker init failed: %s", exc)
 
     # ── StrategyOrchestrator ──────────────────────────────────────────────────
+    strategy_configs: dict = {}
     try:
         from pathlib import Path
 
@@ -128,15 +131,60 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from config.settings import settings as app_settings
         from strategies.orchestrator import StrategyOrchestrator
         config_path = Path(app_settings.strategy_config_path)
-        strategy_configs: dict = {}
         if config_path.exists():
             with open(config_path) as f:
                 strategy_configs = yaml.safe_load(f) or {}
+
+        # Build strategy instances from strategy_config.yaml
+        _strategies: list = []
+        _macro_strategy = None
+        try:
+            from strategies.macro_factor import MacroFactorStrategy
+            from strategies.market_making import MarketMakingStrategy
+            from strategies.mean_reversion import MeanReversionStrategy
+            from strategies.momentum import MomentumStrategy
+            from strategies.sentiment import SentimentStrategy
+            from strategies.stat_arb import StatArbStrategy
+
+            strategy_map = {
+                "momentum":       (MomentumStrategy,      strategy_configs.get("momentum", {}),
+                                   strategy_configs.get("momentum", {}).get("default_tickers", [])),
+                "mean_reversion": (MeanReversionStrategy, strategy_configs.get("mean_reversion", {}),
+                                   strategy_configs.get("mean_reversion", {}).get("default_tickers", [])),
+                "stat_arb":       (StatArbStrategy,       strategy_configs.get("stat_arb", {}),
+                                   [t for pair in strategy_configs.get("stat_arb", {}).get("default_pairs", []) for t in pair]),
+                "market_making":  (MarketMakingStrategy,  strategy_configs.get("market_making", {}),
+                                   strategy_configs.get("market_making", {}).get("default_tickers", [])),
+                "sentiment":      (SentimentStrategy,     strategy_configs.get("sentiment", {}),
+                                   strategy_configs.get("sentiment", {}).get("default_tickers", [])),
+            }
+            macro_cfg = strategy_configs.get("macro_factor", {})
+            if macro_cfg.get("enabled", True):
+                macro_tickers = list({
+                    t for cfg in strategy_configs.values()
+                    if isinstance(cfg, dict)
+                    for t in cfg.get("default_tickers", [])
+                })
+                _macro_strategy = MacroFactorStrategy(
+                    config=macro_cfg, tickers=macro_tickers or ["SPY"]
+                )
+
+            for sid, (cls, cfg, tickers) in strategy_map.items():
+                if cfg.get("enabled", True) and tickers:
+                    try:
+                        _strategies.append(cls(config=cfg, tickers=list(set(tickers))))
+                        logger.info("Strategy loaded: %s (%d tickers)", sid, len(set(tickers)))
+                    except Exception as sinit_exc:
+                        logger.warning("Strategy %s failed to init: %s", sid, sinit_exc)
+        except Exception as load_exc:
+            logger.warning("Strategy loading failed: %s", load_exc)
+
         state.orchestrator = StrategyOrchestrator(
-            strategies=[],
-            config=strategy_configs,
+            strategies=_strategies,
+            macro_strategy=_macro_strategy,
+            config=strategy_configs.get("portfolio", {}),
         )
-        logger.info("StrategyOrchestrator initialised")
+        logger.info("StrategyOrchestrator initialised with %d strategies", len(_strategies))
     except Exception as exc:
         logger.warning("StrategyOrchestrator init failed: %s", exc)
 
@@ -159,6 +207,90 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception as exc2:
             logger.warning("DataStore fallback also failed: %s", exc2)
 
+    # ── DataPipeline (news + bar polling) ─────────────────────────────────────
+    pipeline = None
+    try:
+        from data.pipeline import DataPipeline
+        all_equity: list[str] = []
+        all_crypto: list[str] = []
+        for cfg_val in (strategy_configs.get(k, {}) for k in
+                        ("momentum", "mean_reversion", "market_making", "sentiment")):
+            for t in cfg_val.get("default_tickers", []):
+                if "-" in t and any(t.endswith(s) for s in ("-USD", "-USDT", "-BTC")):
+                    all_crypto.append(t)
+                else:
+                    all_equity.append(t)
+        equity_tickers = list(dict.fromkeys(all_equity)) or ["AAPL", "MSFT", "NVDA"]
+        crypto_tickers = list(dict.fromkeys(all_crypto)) or ["BTC-USD", "ETH-USD"]
+        pipeline = DataPipeline(
+            store=state.data_store,
+            equity_tickers=equity_tickers,
+            crypto_tickers=crypto_tickers,
+        )
+        await pipeline.start()
+        state._pipeline = pipeline  # type: ignore[attr-defined]
+        logger.info(
+            "DataPipeline started (equity=%s crypto=%s)",
+            equity_tickers, crypto_tickers,
+        )
+    except Exception as exc:
+        logger.warning("DataPipeline start failed: %s", exc)
+
+    # ── Portfolio (live state shared by TradingEngine + REST endpoints) ────────
+    try:
+        from backtesting.portfolio import Portfolio as BtPortfolio
+        live_portfolio = BtPortfolio(initial_capital=100_000.0)
+        state.portfolio = live_portfolio
+        logger.info("Live Portfolio initialised")
+    except Exception as exc:
+        logger.warning("Live Portfolio init failed: %s", exc)
+
+    # ── TradingEngine ─────────────────────────────────────────────────────────
+    trading_engine = None
+    try:
+        from execution.trading_engine import TradingEngine
+
+        # Collect all unique tickers from loaded strategies
+        engine_tickers: list[str] = []
+        if state.orchestrator is not None:
+            for s in getattr(state.orchestrator, "strategies", []):
+                for t in getattr(s, "tickers", []):
+                    if t not in engine_tickers:
+                        engine_tickers.append(t)
+        if not engine_tickers:
+            engine_tickers = ["AAPL", "MSFT", "NVDA", "BTC-USD", "ETH-USD"]
+
+        bar_interval = strategy_configs.get("portfolio", {}).get("default_bar_interval", "1d")
+
+        trading_engine = TradingEngine(
+            store=state.data_store,
+            orchestrator=state.orchestrator,
+            broker=state.broker,
+            risk_manager=state.risk_manager,
+            monitor=state.monitor,
+            portfolio=state.portfolio,
+            tickers=engine_tickers,
+            bar_interval=bar_interval,
+            trading_mode=state.trading_mode,
+            initial_capital=100_000.0,
+            app_state=state,
+        )
+        state.trading_engine = trading_engine
+
+        # Auto-start the trading loop in paper and live modes
+        if state.trading_mode in ("paper", "live"):
+            await trading_engine.start()
+            logger.info(
+                "TradingEngine auto-started (mode=%s tickers=%s interval=%s)",
+                state.trading_mode, engine_tickers, bar_interval,
+            )
+        else:
+            logger.info(
+                "TradingEngine ready (mode=dev — call POST /api/trading/start to begin)"
+            )
+    except Exception as exc:
+        logger.warning("TradingEngine init failed: %s", exc)
+
     # ── Attach state to app ───────────────────────────────────────────────────
     # Only set app_state if it hasn't been pre-loaded by tests
     if not hasattr(app.state, "app_state"):
@@ -168,6 +300,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield  # ── server is running ─────────────────────────────────────────────
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
+    if trading_engine is not None:
+        try:
+            await trading_engine.stop()
+            logger.info("TradingEngine stopped")
+        except Exception as exc:
+            logger.warning("TradingEngine stop error: %s", exc)
+    if pipeline is not None:
+        try:
+            await pipeline.stop()
+            logger.info("DataPipeline stopped")
+        except Exception as exc:
+            logger.warning("DataPipeline stop error: %s", exc)
     # Clear app_state so the next TestClient invocation starts fresh
     if hasattr(app.state, "app_state"):
         del app.state.app_state
@@ -204,10 +348,12 @@ app.add_middleware(
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(backtest_router)
+app.include_router(news_router)
 app.include_router(portfolio_router)
 app.include_router(risk_router)
 app.include_router(signals_router)
 app.include_router(strategies_router)
+app.include_router(trading_router)
 app.include_router(ws_router)
 
 

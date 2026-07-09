@@ -16,7 +16,9 @@ export type WSEventType =
   | "risk_alert"
   | "portfolio_update"
   | "heartbeat"
-  | "backtest_progress";
+  | "backtest_progress"
+  | "news"
+  | "trading_status";
 
 export interface WSEvent {
   event_type: WSEventType;

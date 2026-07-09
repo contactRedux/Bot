@@ -203,3 +203,25 @@ export const useWsStore = create<WsStore>((set) => ({
   setLastHeartbeat: (ts) => set({ lastHeartbeat: ts }),
   setLastEventType: (t) => set({ lastEventType: t }),
 }));
+
+// ---------------------------------------------------------------------------
+// Trading engine state slice
+// ---------------------------------------------------------------------------
+
+interface TradingStore {
+  running: boolean;
+  tradingMode: string;
+  loopCount: number;
+  setRunning: (v: boolean) => void;
+  setTradingMode: (m: string) => void;
+  setLoopCount: (n: number) => void;
+}
+
+export const useTradingStore = create<TradingStore>((set) => ({
+  running: false,
+  tradingMode: "dev",
+  loopCount: 0,
+  setRunning: (v) => set({ running: v }),
+  setTradingMode: (m) => set({ tradingMode: m }),
+  setLoopCount: (n) => set({ loopCount: n }),
+}));

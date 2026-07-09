@@ -50,12 +50,29 @@ from sqlalchemy import (
     create_engine,
     event,
 )
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from data.schemas import FundamentalSnapshot, NewsArticle, OHLCVBar
 
 logger = structlog.get_logger(__name__)
+
+
+def _dialect_insert(table_class: type, dialect_name: str):
+    """
+    Return an INSERT statement that silently ignores duplicate-key violations,
+    compatible with both SQLite (``on_conflict_do_nothing``) and PostgreSQL
+    (same SQLAlchemy API, different underlying dialect).
+
+    SQLAlchemy's unified ``insert`` + ``on_conflict_do_nothing`` works for
+    both dialects since SQLAlchemy 1.4.  We branch only to import the right
+    dialect-specific ``insert`` function.
+    """
+    if dialect_name == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert
+    else:
+        # PostgreSQL, MySQL, and most other dialects supported by SQLAlchemy
+        from sqlalchemy.dialects.postgresql import insert
+    return insert(table_class)
 
 
 # ── ORM base ────────────────────────────────────────────────────────────────
@@ -217,10 +234,11 @@ class DataStore:
         if poolclass is not None:
             engine_kwargs["poolclass"] = poolclass
         self._engine = create_engine(database_url, **engine_kwargs)
+        self._dialect = self._engine.dialect.name  # "sqlite" | "postgresql" | …
 
         # Enable WAL mode for SQLite — dramatically improves concurrent read
         # performance when the data pipeline is writing while the API reads.
-        if database_url.startswith("sqlite"):
+        if self._dialect == "sqlite":
             @event.listens_for(self._engine, "connect")
             def _set_sqlite_pragma(dbapi_conn: object, connection_record: object) -> None:
                 cursor = dbapi_conn.cursor()  # type: ignore[attr-defined]
@@ -231,7 +249,7 @@ class DataStore:
         # Create all tables if they don't exist
         Base.metadata.create_all(self._engine)
         self._Session = sessionmaker(bind=self._engine, expire_on_commit=False)
-        logger.info("datastore.initialized", database_url=database_url)
+        logger.info("datastore.initialized", database_url=database_url, dialect=self._dialect)
 
     # ── OHLCV Bars ───────────────────────────────────────────────────────────
 
@@ -274,7 +292,7 @@ class DataStore:
             for b in bars
         ]
 
-        stmt = sqlite_insert(OHLCVBarRow).values(rows)
+        stmt = _dialect_insert(OHLCVBarRow, self._dialect).values(rows)
         do_nothing = stmt.on_conflict_do_nothing(
             index_elements=["ticker", "interval", "event_timestamp"]
         )
@@ -397,7 +415,7 @@ class DataStore:
             for a in articles
         ]
 
-        stmt = sqlite_insert(NewsArticleRow).values(rows)
+        stmt = _dialect_insert(NewsArticleRow, self._dialect).values(rows)
         do_nothing = stmt.on_conflict_do_nothing(index_elements=["article_id"])
 
         with self._Session() as session:
@@ -539,7 +557,7 @@ class DataStore:
             for s in snapshots
         ]
 
-        stmt = sqlite_insert(FundamentalRow).values(rows)
+        stmt = _dialect_insert(FundamentalRow, self._dialect).values(rows)
         do_nothing = stmt.on_conflict_do_nothing(
             index_elements=["ticker", "period", "period_end_date"]
         )

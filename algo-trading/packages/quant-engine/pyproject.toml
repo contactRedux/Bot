@@ -22,6 +22,7 @@ dependencies = [
     "APScheduler>=3.10",
     "sqlalchemy>=2.0",
     "alembic>=1.13",
+    "psycopg2-binary>=2.9",
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
     "aiofiles>=23.2",

@@ -286,6 +286,8 @@ class WSEvent(BaseModel):
         "portfolio_update",
         "heartbeat",
         "backtest_progress",
+        "news",
+        "trading_status",
     ]
     payload: dict[str, Any]
     timestamp: str = Field(

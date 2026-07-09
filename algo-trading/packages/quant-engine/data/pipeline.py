@@ -508,6 +508,8 @@ class DataPipeline:
         end = datetime.now(tz=UTC)
         start = end - timedelta(minutes=self.news_poll_minutes * 2)  # overlap window
 
+        all_new_articles: list = []
+
         # Bloomberg news (first priority — only equity tickers are covered)
         bbg_feed = self._get_bloomberg_feed()
         if bbg_feed is not None:
@@ -520,6 +522,8 @@ class DataPipeline:
                     ),
                 )
                 inserted = self.store.write_news(articles)
+                if inserted:
+                    all_new_articles.extend(articles[:inserted])
                 logger.info(
                     "pipeline.poll_news.bloomberg",
                     fetched=len(articles),
@@ -539,6 +543,8 @@ class DataPipeline:
                     ),
                 )
                 inserted = self.store.write_news(articles)
+                if inserted:
+                    all_new_articles.extend(articles[:inserted])
                 logger.info(
                     "pipeline.poll_news.newsapi",
                     fetched=len(articles),
@@ -560,6 +566,8 @@ class DataPipeline:
                 ),
             )
             inserted = self.store.write_news(articles)
+            if inserted:
+                all_new_articles.extend(articles[:inserted])
             logger.info(
                 "pipeline.poll_news.gdelt",
                 fetched=len(articles),
@@ -567,6 +575,30 @@ class DataPipeline:
             )
         except Exception as exc:
             logger.error("pipeline.poll_news.gdelt_error", error=str(exc))
+
+        # Broadcast newly-inserted articles to WS clients (capped at 20 per poll)
+        if all_new_articles:
+            try:
+                from api.ws.feed import broadcast_news
+                from datetime import timezone as _tz
+                for article in all_new_articles[:20]:
+                    score = article.sentiment_score or 0.0
+                    article_ticker = article.tickers[0] if article.tickers else "GENERAL"
+                    label = "positive" if score > 0.1 else "negative" if score < -0.1 else "neutral"
+                    await broadcast_news({
+                        "id": article.article_id,
+                        "ticker": article_ticker,
+                        "headline": article.title,
+                        "source": article.source,
+                        "sentiment_score": round(score, 4),
+                        "sentiment_label": label,
+                        "published_at": article.event_timestamp.replace(
+                            tzinfo=_tz.utc
+                        ).isoformat(),
+                        "url": article.url,
+                    })
+            except Exception as exc:
+                logger.debug("pipeline.poll_news.ws_broadcast_error: %s", exc)
 
     async def _poll_fundamentals(self) -> None:
         """

@@ -235,3 +235,21 @@ async def broadcast_backtest_progress(
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
+
+
+async def broadcast_news(article_dict: dict[str, Any]) -> None:
+    """Broadcast a news article to all WebSocket clients."""
+    await manager.broadcast({
+        "event_type": "news",
+        "payload": article_dict,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+async def broadcast_trading_status(running: bool, mode: str) -> None:
+    """Broadcast trading engine state change to all WebSocket clients."""
+    await manager.broadcast({
+        "event_type": "trading_status",
+        "payload": {"running": running, "trading_mode": mode},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })

@@ -61,11 +61,11 @@ class Settings(BaseSettings):
 
     # ── Database ─────────────────────────────────────────────────────────────
     database_url: str = Field(
-        default="sqlite:///./algo_trading.db",
+        default="postgresql+psycopg2://algo:algo@localhost:5432/algo_trading",
         description=(
             "SQLAlchemy connection string. "
-            "SQLite for dev/backtest; PostgreSQL for production. "
-            "Example: postgresql+asyncpg://user:pass@localhost/algodb"
+            "Default: PostgreSQL on localhost. "
+            "SQLite fallback: sqlite:///./algo_trading.db"
         ),
     )
 

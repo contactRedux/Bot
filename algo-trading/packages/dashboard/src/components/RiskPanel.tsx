@@ -11,9 +11,10 @@
  * Data is fetched via GET /risk/status (10 s poll) and merged with
  * real-time risk_alert events already in riskStore.
  */
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchRiskStatus, resumeTrading } from "@/lib/api";
-import { useRiskStore } from "@/store";
+import { fetchRiskStatus, resumeTrading, stopTrading } from "@/lib/api";
+import { useRiskStore, useTradingStore } from "@/store";
 
 // ---------------------------------------------------------------------------
 // Gauge bar (percentage)
@@ -75,6 +76,9 @@ function MetricRow({ label, value }: { label: string; value: string }) {
 export default function RiskPanel() {
   const storeStatus = useRiskStore((s) => s.status);
   const setStatus = useRiskStore((s) => s.setStatus);
+  const running = useTradingStore((s) => s.running);
+  const setRunning = useTradingStore((s) => s.setRunning);
+  const [haltBusy, setHaltBusy] = useState(false);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["risk"],
@@ -103,6 +107,16 @@ export default function RiskPanel() {
     await refetch();
   };
 
+  const handleHalt = async () => {
+    setHaltBusy(true);
+    try {
+      await stopTrading();
+      setRunning(false);
+    } finally {
+      setHaltBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* HALT banner */}
@@ -117,6 +131,22 @@ export default function RiskPanel() {
             className="rounded border border-rose-400/40 px-3 py-1 text-xs font-medium text-rose-400 transition hover:bg-rose-500/20"
           >
             Resume
+          </button>
+        </div>
+      )}
+
+      {/* Manual halt button — only when running and not already halted */}
+      {running && !s?.halted && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-2.5">
+          <p className="text-xs text-amber-400/80">
+            Manually stop the trading engine (does not clear risk halt state).
+          </p>
+          <button
+            onClick={handleHalt}
+            disabled={haltBusy}
+            className="ml-4 shrink-0 rounded border border-amber-500/40 px-3 py-1 text-xs font-medium text-amber-400 transition hover:bg-amber-500/20 disabled:opacity-40"
+          >
+            {haltBusy ? "Stopping…" : "Stop Engine"}
           </button>
         </div>
       )}

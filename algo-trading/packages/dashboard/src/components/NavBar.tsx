@@ -1,22 +1,24 @@
 import { NavLink } from "react-router-dom";
-import { useWsStore } from "@/store";
+import { useWsStore, useTradingStore } from "@/store";
 
 /**
  * Top navigation bar for the trading terminal.
- * Uses react-router-dom NavLink for active route highlighting.
- * WS connection indicator is wired to the wsStore.
+ * Shows WS connection status and live trading engine state.
  */
 const links = [
   { to: "/", label: "Overview" },
   { to: "/live", label: "Live" },
+  { to: "/strategies", label: "Strategies" },
   { to: "/backtest", label: "Backtest" },
   { to: "/news", label: "News" },
   { to: "/risk", label: "Risk" },
 ];
 
 export default function NavBar() {
-  const connected = useWsStore((s) => s.connected);
+  const connected    = useWsStore((s) => s.connected);
   const lastHeartbeat = useWsStore((s) => s.lastHeartbeat);
+  const running      = useTradingStore((s) => s.running);
+  const tradingMode  = useTradingStore((s) => s.tradingMode);
 
   const hbAge = lastHeartbeat
     ? Math.round((Date.now() - new Date(lastHeartbeat).getTime()) / 1_000)
@@ -51,20 +53,42 @@ export default function NavBar() {
           ))}
         </div>
 
-        {/* WebSocket status indicator */}
-        <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
-          <span
-            className={`inline-block h-2 w-2 rounded-full transition-colors ${
-              connected ? "bg-emerald-400" : "bg-rose-400"
-            }`}
-          />
-          <span className={connected ? "text-emerald-400" : "text-zinc-500"}>
-            {connected
-              ? hbAge !== null
-                ? `LIVE · ${hbAge}s`
-                : "CONNECTED"
-              : "DISCONNECTED"}
-          </span>
+        {/* Status indicators */}
+        <div className="ml-auto flex items-center gap-4 text-xs">
+          {/* Trading engine state */}
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`inline-block h-2 w-2 rounded-full transition-colors ${
+                running ? "bg-emerald-400" : "bg-zinc-600"
+              }`}
+            />
+            <span className={running ? "text-emerald-400" : "text-zinc-500"}>
+              {running
+                ? `TRADING · ${tradingMode.toUpperCase()}`
+                : tradingMode === "dev"
+                ? "ENGINE IDLE"
+                : "ENGINE STOPPED"}
+            </span>
+          </div>
+
+          {/* Divider */}
+          <span className="text-zinc-700">|</span>
+
+          {/* WebSocket connection */}
+          <div className="flex items-center gap-1.5 text-zinc-500">
+            <span
+              className={`inline-block h-2 w-2 rounded-full transition-colors ${
+                connected ? "bg-sky-400" : "bg-rose-400"
+              }`}
+            />
+            <span className={connected ? "text-sky-400" : "text-zinc-500"}>
+              {connected
+                ? hbAge !== null
+                  ? `WS · ${hbAge}s`
+                  : "WS CONNECTED"
+                : "WS DISCONNECTED"}
+            </span>
+          </div>
         </div>
       </div>
     </nav>

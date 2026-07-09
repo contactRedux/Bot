@@ -314,12 +314,14 @@ class Portfolio:
         Returns
         -------
         dict[str, dict]
-            Maps ticker → {quantity, avg_cost, unrealised_pnl, realised_pnl}.
+            Maps ticker → {quantity, avg_cost, mark_price, unrealised_pnl,
+            realised_pnl, market_value}.
         """
         return {
             t: {
                 "quantity": round(p.quantity, 6),
                 "avg_cost": round(p.avg_cost, 4),
+                "mark_price": round(self._mark_prices.get(t, p.avg_cost), 4),
                 "unrealised_pnl": round(p.unrealised_pnl, 4),
                 "realised_pnl": round(p.realised_pnl, 4),
                 "market_value": round(

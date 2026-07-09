@@ -118,6 +118,10 @@ class StrategyOrchestrator:
         config: dict[str, Any] | None = None,
     ) -> None:
         self.strategies = list(strategies)
+        # Dict view required by /api/strategies routes: strategy_id → strategy instance
+        self._strategies: dict[str, BaseStrategy] = {
+            s.strategy_id: s for s in self.strategies
+        }
         self.macro_strategy = macro_strategy
         self.total_capital = total_capital
         self.config = config or {}

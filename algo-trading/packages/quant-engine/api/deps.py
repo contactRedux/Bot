@@ -69,6 +69,7 @@ class AppState:
     orchestrator: Any = None       # StrategyOrchestrator
     portfolio: Any = None          # Portfolio (live state)
     data_store: Any = None         # DataStore (SQLAlchemy-backed market data)
+    trading_engine: Any = None     # TradingEngine (live loop)
 
     # Backtest run cache: run_id → BacktestResponse dict
     backtest_results: dict[str, dict] = field(default_factory=dict)

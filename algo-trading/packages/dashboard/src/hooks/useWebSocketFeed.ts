@@ -6,7 +6,9 @@ import {
   useRiskStore,
   useFillStore,
   useWsStore,
+  useTradingStore,
 } from "@/store";
+import { fetchNews, fetchTradingStatus } from "@/lib/api";
 import type { WSEvent } from "@/lib/types";
 
 /**
@@ -35,15 +37,17 @@ export function useWebSocketFeed() {
   const unmountedRef = useRef(false);
 
   // Store actions
-  const addSignal      = useSignalStore((s) => s.addSignal);
-  const addArticle     = useNewsStore((s) => s.addArticle);
-  const setSnapshot    = usePortfolioStore((s) => s.setSnapshot);
-  const appendEquity   = usePortfolioStore((s) => s.appendEquityPoint);
-  const setRiskStatus  = useRiskStore((s) => s.setStatus);
-  const addFill        = useFillStore((s) => s.addFill);
-  const setConnected   = useWsStore((s) => s.setConnected);
-  const setHeartbeat   = useWsStore((s) => s.setLastHeartbeat);
-  const setLastEvent   = useWsStore((s) => s.setLastEventType);
+  const addSignal          = useSignalStore((s) => s.addSignal);
+  const addArticle         = useNewsStore((s) => s.addArticle);
+  const setSnapshot        = usePortfolioStore((s) => s.setSnapshot);
+  const appendEquity       = usePortfolioStore((s) => s.appendEquityPoint);
+  const setRiskStatus      = useRiskStore((s) => s.setStatus);
+  const addFill            = useFillStore((s) => s.addFill);
+  const setConnected       = useWsStore((s) => s.setConnected);
+  const setHeartbeat       = useWsStore((s) => s.setLastHeartbeat);
+  const setLastEvent       = useWsStore((s) => s.setLastEventType);
+  const setTradingRunning  = useTradingStore((s) => s.setRunning);
+  const setTradingMode     = useTradingStore((s) => s.setTradingMode);
 
   const connect = useCallback(() => {
     if (unmountedRef.current) return;
@@ -58,6 +62,21 @@ export function useWebSocketFeed() {
     ws.onopen = () => {
       reconnectDelayRef.current = 1_000; // reset back-off
       setConnected(true);
+      // Seed the news store from REST on (re)connect
+      fetchNews(undefined, 100)
+        .then((res) => {
+          if (res.articles.length > 0) {
+            useNewsStore.getState().setArticles(res.articles);
+          }
+        })
+        .catch(() => undefined);
+      // Seed trading status from REST on (re)connect
+      fetchTradingStatus()
+        .then((res) => {
+          setTradingRunning(res.running);
+          setTradingMode(res.trading_mode);
+        })
+        .catch(() => undefined);
     };
 
     ws.onmessage = (event: MessageEvent) => {
@@ -100,17 +119,26 @@ export function useWebSocketFeed() {
             break;
 
           case "bar":
-            // Bars are consumed by the price chart via React Query (REST),
-            // but we track that bars are flowing.
+            // Bars consumed by PriceChart via REST — no store update needed.
             break;
 
           case "backtest_progress":
             // Handled by polling in BacktestExplorer — no store update needed.
             break;
 
-          default:
+          case "news":
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            addArticle(msg.payload as any); // unexpected type — treat as news
+            addArticle(msg.payload as any);
+            break;
+
+          case "trading_status": {
+            const ts = msg.payload as { running: boolean; trading_mode: string };
+            setTradingRunning(ts.running ?? false);
+            if (ts.trading_mode) setTradingMode(ts.trading_mode);
+            break;
+          }
+
+          default:
             break;
         }
       } catch {
@@ -143,6 +171,8 @@ export function useWebSocketFeed() {
     setConnected,
     setHeartbeat,
     setLastEvent,
+    setTradingRunning,
+    setTradingMode,
   ]);
 
   useEffect(() => {
