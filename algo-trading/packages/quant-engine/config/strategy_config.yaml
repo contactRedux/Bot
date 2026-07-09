@@ -167,6 +167,99 @@ sentiment:
   default_tickers: ["AAPL", "TSLA", "NVDA", "AMZN", "MSFT", "BTC-USD"]
 
 
+# ── Strategy: Kelly Volatility Targeting ─────────────────────────────────────
+# Sizes positions using fractional Kelly criterion + volatility targeting.
+# Scales UP in low-vol, DOWN in high-vol regimes (Moreira & Muir 2017).
+# Only enters when both Kelly edge and vol-target agree on direction.
+kelly_vol:
+  enabled: true
+  allocation_weight: 0.12
+
+  # Annualised volatility target (fraction, e.g. 0.15 = 15%)
+  vol_target_pct: 0.15
+
+  # Rolling window (bars) for realised vol and Kelly win/loss estimation
+  lookback_bars: 60
+
+  # Fractional Kelly multiplier (0.25 = quarter-Kelly — conservative)
+  kelly_fraction: 0.25
+
+  # Minimum expected edge (fraction) before sizing a position
+  min_edge_pct: 0.002
+
+  # Hard cap: position notional / capital
+  max_leverage: 2.0
+
+  # Only re-size the position every N bars to control turnover
+  rebalance_bars: 5
+
+  default_tickers: ["AAPL", "MSFT", "NVDA", "GOOGL", "TSLA", "SPY"]
+
+
+# ── Strategy: Kalman Filter Trend Following ───────────────────────────────────
+# Uses a 1D Kalman filter as an optimal price tracker.
+# Trades the normalised innovation (prediction error / √innovation_variance).
+# Large positive innovation = price trending up faster than model predicted → BUY.
+# Adapts automatically to volatility regime via the innovation variance S.
+kalman_trend:
+  enabled: true
+  allocation_weight: 0.13
+
+  # Measurement noise variance R (higher = smoother filter, slower response)
+  observation_noise: 1.0
+
+  # Process noise variance Q (higher = more responsive to price changes)
+  process_noise: 0.01
+
+  # Initial state variance P_0
+  initial_variance: 1.0
+
+  # Enter when |normalised innovation| exceeds this threshold (z-score units)
+  entry_threshold: 1.5
+
+  # Exit when |normalised innovation| falls below this (filter has caught up)
+  exit_threshold: 0.3
+
+  # Minimum bars before generating any signal (warmup)
+  min_bars: 20
+
+  position_size_scale: 1.0
+
+  default_tickers: ["AAPL", "MSFT", "NVDA", "AMZN", "TSLA", "BTC-USD", "ETH-USD"]
+
+
+# ── Strategy: VWAP Mean Reversion ────────────────────────────────────────────
+# Trades deviations from VWAP (Volume-Weighted Average Price).
+# Institutions benchmark execution quality against VWAP — prices mean-revert
+# to it continuously. Includes ATR + volume confirmation filters.
+vwap_reversion:
+  enabled: true
+  allocation_weight: 0.13
+
+  # Rolling window (bars) for VWAP computation
+  vwap_window: 20
+
+  # Enter when (price - VWAP) / VWAP exceeds this band (0.5%)
+  entry_band_pct: 0.005
+
+  # Exit when deviation falls within this band (0.1%)
+  exit_band_pct: 0.001
+
+  # Skip entry if ATR/price > max_atr_pct (too volatile to trade)
+  atr_filter: true
+  atr_window: 14
+  max_atr_pct: 0.03
+
+  # Only enter when current volume > rolling mean volume (confirms conviction)
+  volume_filter: true
+  volume_window: 20
+
+  # Warmup bars before generating signals
+  min_bars: 25
+
+  default_tickers: ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "SPY"]
+
+
 # ── Strategy: Macro Factor ────────────────────────────────────────────────────
 # A top-down meta-strategy that:
 #   1. Reduces all strategy allocations during high-fear regimes (VIX > threshold)

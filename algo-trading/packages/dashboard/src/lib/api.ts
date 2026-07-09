@@ -160,3 +160,50 @@ export const fetchBacktestStatus = (runId: string): Promise<BacktestStatusRespon
 
 export const fetchBacktestResult = (runId: string): Promise<BacktestResponse> =>
   request<BacktestResponse>(`/api/backtest/${runId}`);
+
+// ---------------------------------------------------------------------------
+// Optimization
+// ---------------------------------------------------------------------------
+
+export interface OptimizeRequest {
+  strategy: string;
+  tickers: string[];
+  start_date: string;
+  end_date: string;
+  interval?: string;
+  n_trials?: number;
+  objective?: string;
+  initial_capital?: number;
+}
+
+export interface WalkForwardRequest {
+  strategies: string[];
+  tickers: string[];
+  start_date: string;
+  end_date: string;
+  interval?: string;
+  n_splits?: number;
+  oos_size_days?: number;
+  initial_capital?: number;
+}
+
+export const runOptimize = (body: OptimizeRequest): Promise<Record<string, unknown>> =>
+  request<Record<string, unknown>>("/api/optimize/run", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const fetchOptimizeStatus = (runId: string): Promise<Record<string, unknown>> =>
+  request<Record<string, unknown>>(`/api/optimize/${runId}/status`);
+
+export const fetchOptimizeResult = (runId: string): Promise<Record<string, unknown>> =>
+  request<Record<string, unknown>>(`/api/optimize/${runId}`);
+
+export const runWalkForward = (body: WalkForwardRequest): Promise<Record<string, unknown>> =>
+  request<Record<string, unknown>>("/api/backtest/walkforward", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const fetchWalkForwardResult = (runId: string): Promise<Record<string, unknown>> =>
+  request<Record<string, unknown>>(`/api/optimize/${runId}`);

@@ -52,6 +52,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.deps import AppState
 from api.routes.backtest import router as backtest_router
 from api.routes.news import router as news_router
+from api.routes.optimize import router as optimize_router
 from api.routes.portfolio import router as portfolio_router
 from api.routes.risk import router as risk_router
 from api.routes.signals import router as signals_router
@@ -139,24 +140,36 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         _strategies: list = []
         _macro_strategy = None
         try:
+            from strategies.kalman_trend import KalmanTrendStrategy
+            from strategies.kelly_vol import KellyVolStrategy
             from strategies.macro_factor import MacroFactorStrategy
             from strategies.market_making import MarketMakingStrategy
             from strategies.mean_reversion import MeanReversionStrategy
             from strategies.momentum import MomentumStrategy
             from strategies.sentiment import SentimentStrategy
             from strategies.stat_arb import StatArbStrategy
+            from strategies.vwap_reversion import VWAPReversionStrategy
 
-            strategy_map = {
+            # StatArbStrategy takes pairs= not tickers=; handle it separately.
+            stat_arb_cfg = strategy_configs.get("stat_arb", {})
+            stat_arb_pairs_raw = stat_arb_cfg.get("default_pairs", [])
+            stat_arb_pairs = [tuple(p) for p in stat_arb_pairs_raw if len(p) == 2]
+
+            non_stat_arb_map = {
                 "momentum":       (MomentumStrategy,      strategy_configs.get("momentum", {}),
                                    strategy_configs.get("momentum", {}).get("default_tickers", [])),
                 "mean_reversion": (MeanReversionStrategy, strategy_configs.get("mean_reversion", {}),
                                    strategy_configs.get("mean_reversion", {}).get("default_tickers", [])),
-                "stat_arb":       (StatArbStrategy,       strategy_configs.get("stat_arb", {}),
-                                   [t for pair in strategy_configs.get("stat_arb", {}).get("default_pairs", []) for t in pair]),
                 "market_making":  (MarketMakingStrategy,  strategy_configs.get("market_making", {}),
                                    strategy_configs.get("market_making", {}).get("default_tickers", [])),
                 "sentiment":      (SentimentStrategy,     strategy_configs.get("sentiment", {}),
                                    strategy_configs.get("sentiment", {}).get("default_tickers", [])),
+                "kelly_vol":      (KellyVolStrategy,      strategy_configs.get("kelly_vol", {}),
+                                   strategy_configs.get("kelly_vol", {}).get("default_tickers", [])),
+                "kalman_trend":   (KalmanTrendStrategy,   strategy_configs.get("kalman_trend", {}),
+                                   strategy_configs.get("kalman_trend", {}).get("default_tickers", [])),
+                "vwap_reversion": (VWAPReversionStrategy, strategy_configs.get("vwap_reversion", {}),
+                                   strategy_configs.get("vwap_reversion", {}).get("default_tickers", [])),
             }
             macro_cfg = strategy_configs.get("macro_factor", {})
             if macro_cfg.get("enabled", True):
@@ -169,13 +182,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     config=macro_cfg, tickers=macro_tickers or ["SPY"]
                 )
 
-            for sid, (cls, cfg, tickers) in strategy_map.items():
+            for sid, (cls, cfg, tickers) in non_stat_arb_map.items():
                 if cfg.get("enabled", True) and tickers:
                     try:
                         _strategies.append(cls(config=cfg, tickers=list(set(tickers))))
                         logger.info("Strategy loaded: %s (%d tickers)", sid, len(set(tickers)))
                     except Exception as sinit_exc:
                         logger.warning("Strategy %s failed to init: %s", sid, sinit_exc)
+
+            # StatArbStrategy — requires pairs= keyword
+            if stat_arb_cfg.get("enabled", True) and stat_arb_pairs:
+                try:
+                    _strategies.append(StatArbStrategy(config=stat_arb_cfg, pairs=stat_arb_pairs))
+                    logger.info("Strategy loaded: stat_arb (%d pairs)", len(stat_arb_pairs))
+                except Exception as sinit_exc:
+                    logger.warning("Strategy stat_arb failed to init: %s", sinit_exc)
         except Exception as load_exc:
             logger.warning("Strategy loading failed: %s", load_exc)
 
@@ -349,6 +370,7 @@ app.add_middleware(
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(backtest_router)
 app.include_router(news_router)
+app.include_router(optimize_router)
 app.include_router(portfolio_router)
 app.include_router(risk_router)
 app.include_router(signals_router)

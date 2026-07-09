@@ -7,7 +7,7 @@ Imports the public API for convenient access:
         BaseStrategy, Order, OrderSide, OrderType,
         MomentumStrategy, MeanReversionStrategy, StatArbStrategy,
         MarketMakingStrategy, SentimentStrategy, MacroFactorStrategy,
-        StrategyOrchestrator,
+        VWAPReversionStrategy, KellyVolStrategy, StrategyOrchestrator,
     )
 """
 
@@ -18,6 +18,8 @@ from strategies.stat_arb import StatArbStrategy
 from strategies.market_making import MarketMakingStrategy
 from strategies.sentiment import SentimentStrategy, ScoredArticle
 from strategies.macro_factor import MacroFactorStrategy, MacroRegime
+from strategies.vwap_reversion import VWAPReversionStrategy
+from strategies.kelly_vol import KellyVolStrategy
 from strategies.orchestrator import StrategyOrchestrator
 
 __all__ = [
@@ -34,5 +36,7 @@ __all__ = [
     "ScoredArticle",
     "MacroFactorStrategy",
     "MacroRegime",
+    "VWAPReversionStrategy",
+    "KellyVolStrategy",
     "StrategyOrchestrator",
 ]

@@ -236,6 +236,7 @@ class AlpacaFeed(DataFeed):
                 "alpaca-py is not installed.  Run: pip install 'quant-engine[data]'"
             )
 
+        loop = asyncio.get_event_loop()
         queue: asyncio.Queue[OHLCVBar] = asyncio.Queue()
 
         async def bar_handler(bar) -> None:
@@ -258,7 +259,7 @@ class AlpacaFeed(DataFeed):
                     source=self.SOURCE,
                     adjusted=False,  # real-time bars are not adjusted
                 )
-                await queue.put(canonical)
+                asyncio.run_coroutine_threadsafe(queue.put(canonical), loop)
             except Exception as exc:
                 logger.warning("alpaca.stream_bar_parse_error", error=str(exc))
 
@@ -268,8 +269,12 @@ class AlpacaFeed(DataFeed):
         )
         stream.subscribe_bars(bar_handler, *tickers)
 
-        # Run the stream in a background task
-        stream_task = asyncio.create_task(stream.run())
+        # alpaca-py's stream.run() calls loop.run_until_complete() internally,
+        # which conflicts with our already-running asyncio event loop.
+        # Run it in a thread executor so it gets its own blocking call.
+        import concurrent.futures as _cf
+        executor = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="alpaca_stream")
+        stream_future = loop.run_in_executor(executor, stream.run)
         logger.info("alpaca.stream_bars.started", tickers=tickers)
 
         try:
@@ -277,7 +282,11 @@ class AlpacaFeed(DataFeed):
                 bar = await queue.get()
                 yield bar
         finally:
-            stream_task.cancel()
+            try:
+                stream.stop()
+            except Exception:
+                pass
+            executor.shutdown(wait=False)
             logger.info("alpaca.stream_bars.stopped", tickers=tickers)
 
     # ── Helpers ───────────────────────────────────────────────────────────────

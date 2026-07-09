@@ -150,15 +150,25 @@ class YFinanceFeed(DataFeed):
             end=end.isoformat(),
         )
 
-        df: pd.DataFrame = yf.download(
+        # multi_level_column was removed in yfinance ≥ 0.2.31 — drop it.
+        # For a single ticker, yfinance already returns a flat column index.
+        dl_kwargs: dict = dict(
             tickers=ticker,
             start=start,
             end=end,
             interval=yf_interval,
-            auto_adjust=True,    # split- and dividend-adjusted prices
-            progress=False,      # suppress tqdm progress bar
-            multi_level_column=False,  # avoid MultiIndex column headers
+            auto_adjust=True,
+            progress=False,
         )
+        import inspect as _inspect
+        if "multi_level_column" in _inspect.signature(yf.download).parameters:
+            dl_kwargs["multi_level_column"] = False
+        df: pd.DataFrame = yf.download(**dl_kwargs)
+
+        # yfinance ≥ 0.2.31 returns a MultiIndex even for single tickers.
+        # Flatten it so row access works the same way as before.
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
 
         if df.empty:
             logger.warning("yfinance.fetch_bars.empty", ticker=ticker, interval=interval)

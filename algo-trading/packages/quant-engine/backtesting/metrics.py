@@ -113,7 +113,10 @@ def compute_metrics(
 
     # ── Basic return metrics ───────────────────────────────────────────────
     total_return = _total_return(initial_capital, final_equity)
-    n_calendar_days = max((timestamps[-1] - timestamps[0]).days, 1)
+    # Use last minus first bar timestamp; strip the synthetic "now" seed point
+    # so the duration always reflects the actual simulation range.
+    sorted_ts = sorted(timestamps)
+    n_calendar_days = max((sorted_ts[-1] - sorted_ts[0]).days, 1)
     cagr = _cagr(initial_capital, final_equity, n_calendar_days)
 
     # ── Daily returns ─────────────────────────────────────────────────────
