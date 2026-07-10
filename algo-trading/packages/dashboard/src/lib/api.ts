@@ -7,9 +7,11 @@
  */
 
 import type {
+  AnalysisResponse,
   BacktestRequest,
   BacktestResponse,
   BacktestStatusResponse,
+  PortfolioMetricsResponse,
   PortfolioResponse,
   PriceHistoryResponse,
   RiskStatusResponse,
@@ -115,6 +117,44 @@ export const fetchNews = (ticker?: string, limit = 100): Promise<NewsResponse> =
   return request<NewsResponse>(`/api/news?${params.toString()}`);
 };
 
+export const fetchNewsForTicker = (
+  ticker: string,
+  limit = 20,
+): Promise<NewsResponse & { inserted: number }> =>
+  request<NewsResponse & { inserted: number }>("/api/news/fetch", {
+    method: "POST",
+    body: JSON.stringify({ ticker, limit }),
+  });
+
+// ---------------------------------------------------------------------------
+// Manual paper trade
+// ---------------------------------------------------------------------------
+
+export interface ManualOrderRequest {
+  ticker: string;
+  side: "buy" | "sell";
+  quantity: number;
+  order_type?: "market" | "limit";
+  limit_price?: number | null;
+}
+
+export interface ManualOrderResponse {
+  success: boolean;
+  status: string;
+  ticker: string;
+  side: string;
+  quantity: number;
+  fill_price: number;
+  commission: number;
+  broker_order_id: string;
+}
+
+export const submitManualOrder = (body: ManualOrderRequest): Promise<ManualOrderResponse> =>
+  request<ManualOrderResponse>("/api/trading/order", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
 // ---------------------------------------------------------------------------
 // Trading engine control
 // ---------------------------------------------------------------------------
@@ -207,3 +247,30 @@ export const runWalkForward = (body: WalkForwardRequest): Promise<Record<string,
 
 export const fetchWalkForwardResult = (runId: string): Promise<Record<string, unknown>> =>
   request<Record<string, unknown>>(`/api/optimize/${runId}`);
+
+// ---------------------------------------------------------------------------
+// Analysis
+// ---------------------------------------------------------------------------
+
+export const fetchAnalysis = (ticker: string): Promise<AnalysisResponse> =>
+  request<AnalysisResponse>(`/api/analysis/${encodeURIComponent(ticker)}`);
+
+// ---------------------------------------------------------------------------
+// Portfolio metrics
+// ---------------------------------------------------------------------------
+
+export const fetchPortfolioMetrics = (): Promise<PortfolioMetricsResponse> =>
+  request<PortfolioMetricsResponse>("/api/portfolio/metrics");
+
+// ---------------------------------------------------------------------------
+// AI Analyst
+// ---------------------------------------------------------------------------
+
+export const fetchAiAnalysis = (body: import("./types").AiAnalyseRequest): Promise<import("./types").AiAnalystReport> =>
+  request<import("./types").AiAnalystReport>("/api/ai/analyse", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const fetchAiHistory = (limit = 10): Promise<{ reports: import("./types").AiAnalystReport[]; count: number }> =>
+  request(`/api/ai/history?limit=${limit}`);

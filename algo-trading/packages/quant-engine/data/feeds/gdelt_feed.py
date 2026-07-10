@@ -215,13 +215,24 @@ class GdeltFeed(DataFeed):
             max_records=max_records,
         )
 
-        try:
-            response = self._http_client.get(_GDELT_DOC_API, params=params)
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:
-            logger.error("gdelt.fetch_news.http_error", error=str(exc))
-            return []
+        import random
+        import time as _time
+        max_retries = 4
+        data: dict = {}
+        for attempt in range(max_retries):
+            try:
+                response = self._http_client.get(_GDELT_DOC_API, params=params)
+                response.raise_for_status()
+                data = response.json()
+                break
+            except Exception as exc:
+                is_last = attempt == max_retries - 1
+                if is_last:
+                    logger.warning("gdelt.fetch_news.failed", error=str(exc), attempts=max_retries)
+                    return []
+                backoff = (2 ** attempt) + random.uniform(0, 1)
+                logger.debug("gdelt.fetch_news.retry", attempt=attempt + 1, backoff_s=round(backoff, 2), error=str(exc))
+                _time.sleep(backoff)
 
         raw_articles = data.get("articles", [])
         articles: list[NewsArticle] = []

@@ -62,7 +62,7 @@ def _build_orchestrator(strategy_names: list[str], tickers: list[str], capital: 
 
     Returns a configured StrategyOrchestrator ready for backtesting.
     """
-    from config.settings import get_settings
+    from config.settings import settings
     from strategies.orchestrator import StrategyOrchestrator
     from strategies.momentum import MomentumStrategy
     from strategies.mean_reversion import MeanReversionStrategy
@@ -71,36 +71,42 @@ def _build_orchestrator(strategy_names: list[str], tickers: list[str], capital: 
     from strategies.sentiment import SentimentStrategy
     from strategies.macro_factor import MacroFactorStrategy
 
-    settings = get_settings()
-
     _STRATEGY_MAP = {
-        "momentum":      MomentumStrategy,
+        "momentum":       MomentumStrategy,
         "mean_reversion": MeanReversionStrategy,
-        "stat_arb":      StatArbStrategy,
-        "market_making": MarketMakingStrategy,
-        "sentiment":     SentimentStrategy,
+        "stat_arb":       StatArbStrategy,
+        "market_making":  MarketMakingStrategy,
+        "sentiment":      SentimentStrategy,
     }
 
     if strategy_names == ["all"]:
         strategy_names = list(_STRATEGY_MAP.keys())
 
-    strategies = []
+    built_strategies = []
     for name in strategy_names:
+        if name == "stat_arb":
+            # StatArbStrategy needs pairs, not plain tickers
+            if len(tickers) >= 2:
+                pairs = [(tickers[i], tickers[i + 1]) for i in range(0, len(tickers) - 1, 2)]
+                built_strategies.append(StatArbStrategy(config={"enabled": True, "allocation_weight": 1.0}, pairs=pairs))
+            else:
+                logger.warning("stat_arb requires at least 2 tickers — skipping")
+            continue
         if name not in _STRATEGY_MAP:
             logger.warning("Unknown strategy: %s — skipping", name)
             continue
         cfg = {"enabled": True, "allocation_weight": 1.0}
-        strategies.append(_STRATEGY_MAP[name](name, cfg, tickers))
+        built_strategies.append(_STRATEGY_MAP[name](config=cfg, tickers=tickers))
 
     macro_cfg = {"enabled": True, "allocation_weight": 0.0}
-    macro = MacroFactorStrategy("macro_factor", macro_cfg, tickers)
+    macro = MacroFactorStrategy(config=macro_cfg, tickers=tickers)
 
     portfolio_config = {
-        "max_position_pct": settings.max_position_pct if hasattr(settings, "max_position_pct") else 0.10
+        "max_position_pct": getattr(settings, "max_position_pct", 0.10)
     }
 
     return StrategyOrchestrator(
-        strategies=strategies,
+        strategies=built_strategies,
         macro_strategy=macro,
         total_capital=capital,
         config=portfolio_config,

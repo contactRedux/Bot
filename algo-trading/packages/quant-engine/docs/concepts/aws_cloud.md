@@ -194,6 +194,7 @@ The platform uses `structlog` with JSON output (`LOG_JSON=true` in production). 
 | High drawdown | `current_drawdown_pct` | > 15% | SNS alert |
 | API error rate | ECS 5xx responses | > 1% | SNS alert |
 | Model inference failure | Log filter: "model error" | > 0 | SNS alert |
+| LLM call failure | Log filter: "llm_call_failed" | > 0 | SNS alert |
 
 ---
 

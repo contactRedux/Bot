@@ -1,10 +1,10 @@
 # Algorithmic Trading Platform
 
-A full-stack algorithmic AI trading platform for US equities and crypto, built as a Python/TypeScript monorepo. The project combines market data ingestion, feature engineering, machine learning, strategy orchestration, risk controls, backtesting, Bayesian parameter optimisation, walk-forward validation, paper/live execution, and a real-time dashboard in one research-to-execution stack.
+A full-stack algorithmic AI trading platform for US equities and crypto, built as a Python/TypeScript monorepo. The project combines market data ingestion, feature engineering, machine learning, strategy orchestration, risk controls, backtesting, Bayesian parameter optimisation, walk-forward validation, paper/live execution, an LLM-powered trading analyst, and a real-time dashboard in one research-to-execution stack.
 
 ## Purpose
 
-The purpose of this project is to provide a single platform where quant research, model development, strategy evaluation, risk control, and operator visibility all live in the same system. Instead of splitting research notebooks, broker scripts, dashboards, and risk checks across disconnected tools, this codebase provides one coherent trading platform that can evolve toward a high-grade algorithmic AI trading bot.
+The purpose of this project is to provide a single platform where quant research, model development, strategy evaluation, risk control, operator visibility, and AI-assisted commentary all live in the same system. Instead of splitting research notebooks, broker scripts, dashboards, and risk checks across disconnected tools, this codebase provides one coherent trading platform that can evolve toward a high-grade algorithmic AI trading bot.
 
 ## Problems This Project Solves
 
@@ -16,7 +16,8 @@ The purpose of this project is to provide a single platform where quant research
 - Validates strategies on truly unseen data with expanding-window walk-forward OOS testing
 - Applies centralised risk controls before orders reach execution
 - Supports safe progression from development to paper trading to live trading
-- Gives operators a dashboard for signals, risk, portfolio state, and execution visibility
+- **Provides plain-English analyst reports** via an LLM (GPT-4o / Claude) that explain current market conditions, why the bot made its recent trades, and what to watch next
+- Gives operators a dashboard for signals, risk, portfolio state, execution visibility, and AI commentary
 - Creates a path for institutional upgrades such as Bloomberg integration, cloud deployment, stronger auth, and reproducible infrastructure
 
 ---
@@ -29,19 +30,25 @@ The purpose of this project is to provide a single platform where quant research
 - Bloomberg B-PIPE adapter fully implemented (`data/feeds/bloomberg_feed.py`) with graceful `blpapi`-absent startup; feed priority policy and sentiment quality weights in place
 - Feature pipeline with 40+ technical indicators, sentiment, macro, statistical features, and order-book imbalance (live microstructure feature)
 - ML stack including LSTM, Transformer, Gaussian Process, LightGBM, PPO RL, and ensemble models
-- **Nine implemented strategy families:** momentum, mean reversion, statistical arbitrage (Engle-Granger pairs), market making (Avellaneda-Stoikov), news sentiment, macro factor, **Kalman filter trend**, **Kelly criterion + volatility targeting**, **VWAP mean reversion**
+- **Nine implemented strategy families:** momentum, mean reversion, statistical arbitrage (Engle-Granger pairs), market making (Avellaneda-Stoikov), news sentiment, macro factor, Kalman filter trend, Kelly criterion + volatility targeting, VWAP mean reversion
 - Event-driven backtester with metrics (Sharpe, Sortino, Calmar, CAGR, max drawdown, profit factor), reporting, partial fill model, square-root market impact slippage, and fee/funding hooks
 - **Bayesian hyperparameter optimiser** (`backtesting/optimizer.py`) — Optuna TPE with predefined search spaces for all 5 tuneable strategies; objectives: Sharpe / Sortino / Calmar / total return
 - **Walk-forward out-of-sample validation** (`backtesting/walkforward.py`) — expanding-window fold structure; per-fold and aggregate metrics
 - Risk engine covering VaR, CVaR, drawdown monitoring, daily loss controls, and correlation-aware scaling
 - Execution layer: `PaperBroker` (with optional partial-fill mode), `AlpacaBroker`, `BinanceBroker`; Alpaca stream fixed to run in a thread executor (no event-loop conflict)
+- **AI Analyst** (`api/routes/ai_analyst.py`) — gathers live portfolio, trade, technical, risk, and news data; sends it to OpenAI (GPT-4o) or Anthropic (Claude) and returns a structured analyst report: executive summary, market commentary, trade rationale, risk assessment, and outlook. Works in offline mode (no API key) via rule-based commentary from the same data
 - FastAPI REST API and WebSocket feed; localhost-only binding; OIDC Bearer auth seam for production; RBAC on all mutation endpoints
 - AWS Terraform IaC baseline (11 `.tf` files: VPC, ECR, ECS Fargate, RDS PG16, S3, Secrets Manager, IAM, CloudWatch)
 - Incremental `mypy` hardening — 0 errors on `api/`, `config/settings.py`, `data/store.py`, `execution/base.py`, `strategies/base.py`
 
 ### Frontend (`packages/dashboard`)
 
-- React + TypeScript dashboard with pages for Overview, Backtest Explorer, Live Monitor, News Feed, Risk Dashboard, and Strategy Manager
+- React + TypeScript dashboard with **11 pages**: Overview, Charts, Watchlist, Analysis, **AI Analyst**, Metrics, Backtest Explorer, Live Monitor, News Feed, Risk Dashboard, and Strategy Manager
+- **Charts (`/chart`)** — Yahoo-Finance-style OHLCV chart; editable watchlist persisted to localStorage; time ranges 1D/1W/1M/3M/1Y/ALL; yfinance fallback for arbitrary tickers; paper trade panel
+- **Watchlist (`/watchlist`)** — persistent per-browser watchlist with live prices, 1-day change, and configurable above/below price alerts stored in localStorage
+- **Ticker Analysis (`/analysis`)** — search any ticker for a composite technical rating (Strong Buy → Strong Sell); shows RSI gauge, MACD, Bollinger, moving-average signal scores, indicator grid, and reasoning bullets
+- **AI Analyst (`/ai`)** — send live system data (portfolio, trades, technicals, news, risk metrics) to GPT-4o or Claude for a structured plain-English analyst report explaining what is happening in the market and why the bot made each trade. Includes offline fallback (rule-based, free)
+- **Portfolio Metrics (`/metrics`)** — live session performance: Sharpe, Sortino, Calmar, max drawdown, win rate, CAGR, profit factor, per-strategy attribution
 - **Backtest Explorer** has three panels: standard backtest, **Bayesian optimisation** (trial value chart + best-param chips), and **walk-forward validation** (per-fold table + aggregate mean±std grid)
 - **Strategy Manager** (`/strategies`) — live engine control (start/stop), trading mode badge, per-strategy enable/disable toggles, loop counter
 - Overview page fetches live OHLCV data via TanStack React Query (60 s refresh)
@@ -49,7 +56,7 @@ The purpose of this project is to provide a single platform where quant research
 - Auto-reconnect WebSocket hook; seeds news and trading status from REST on reconnect
 - NavBar shows live engine state indicator (TRADING·PAPER / ENGINE IDLE) and WS connection dot
 - Recharts-based visualisations for equity curves, risk metrics, and optimisation trial values
-- Typed API client and strict TypeScript configuration; `npx tsc --noEmit` → clean
+- Typed API client and strict TypeScript configuration; `npm run build` → clean
 
 ### Quality and testing
 
@@ -94,8 +101,8 @@ algo-trading/
 │   │   ├── risk/             RiskManager · VaR/CVaR · DrawdownMonitor
 │   │   ├── execution/        PaperBroker (partial mode) · AlpacaBroker · BinanceBroker
 │   │   ├── api/              FastAPI REST + WebSocket /ws/feed
-│   │   │   └── routes/       backtest · news · optimize · portfolio · risk · signals
-│   │   │                     strategies · trading
+│   │   │   └── routes/       ai_analyst · backtest · news · optimize · portfolio
+│   │   │                     risk · signals · strategies · trading · analysis
 │   │   ├── config/           pydantic-settings · strategy YAML · structlog
 │   │   ├── infra/terraform/  11 .tf files — full AWS IaC baseline
 │   │   └── docs/concepts/    Learning guides for every concept
@@ -104,7 +111,8 @@ algo-trading/
 │           ├── components/   PriceChart · PortfolioSummary · SignalTable · RiskPanel …
 │           ├── hooks/        useWebSocketFeed (auto-reconnect)
 │           ├── lib/          Typed API client + shared types
-│           ├── pages/        Overview · Backtest · Live · News · Risk · Strategies
+│           ├── pages/        Overview · Charts · Watchlist · Analysis · AiAnalyst
+│           │                 Metrics · Backtest · Live · News · Risk · Strategies
 │           └── store/        Zustand (signals · portfolio · risk · fills · news · trading)
 ├── .env.example              All environment variables documented
 ├── Makefile                  make dev / test / test-integration / test-e2e / backtest / lint
@@ -127,8 +135,12 @@ Bloomberg / Alpaca / Binance / NewsAPI / yfinance
         ↓  api/ws/feed.py
    React Dashboard  (real-time WebSocket)
 
-Offline / research path:
-   BacktestEngine → Optimizer (Optuna TPE) → WalkForwardBacktest → metrics report
+AI Analyst path (on-demand):
+   AppState (portfolio + trades + technicals + signals + news + risk)
+        ↓  api/routes/ai_analyst.py
+   OpenAI / Anthropic  (or offline rule-based fallback)
+        ↓
+   Structured analyst report  →  /ai dashboard page
 ```
 
 ---
@@ -147,7 +159,8 @@ Offline / research path:
 git clone <repo-url>
 cd algo-trading
 cp .env.example .env
-# Edit .env and add your API keys
+# Edit .env and add your API keys (only LLM_API_KEY needed for AI Analyst;
+# everything else is optional — the platform runs fully offline in dev mode)
 ```
 
 ### 2. Install dependencies
@@ -157,6 +170,16 @@ make install
 ```
 
 This runs `pip install -e ".[data,ml,api,dev]"` in the quant-engine package and `npm install` in the dashboard.
+
+To also install LLM client libraries for the AI Analyst:
+
+```bash
+cd packages/quant-engine
+pip install openai          # for GPT-4o
+pip install anthropic       # for Claude
+# or install both:
+pip install -e ".[ai]"
+```
 
 ### 3. Start everything
 
@@ -175,6 +198,60 @@ make dev
 
 ---
 
+## AI Analyst
+
+The AI Analyst (`/ai` dashboard page, `POST /api/ai/analyse`) sends live system data to an LLM and returns a structured plain-English report. It works with no API key in offline mode.
+
+### What data is sent to the LLM
+
+| Data | Source |
+|------|--------|
+| Portfolio state (cash, equity, open positions + unrealised PnL) | Live `Portfolio` |
+| Recent trades (ticker, side, size, fill price, strategy that fired) | `PaperBroker.fills` |
+| Technical analysis per ticker (RSI, MACD, SMA-200, composite rating) | `api/routes/analysis.py` |
+| Active strategy signals (what each strategy currently sees) | `AppState.latest_signals` |
+| Risk state (drawdown %, halt flag, limits) | `DrawdownMonitor` |
+| News headlines from last 48h with sentiment scores | `DataStore.read_news()` |
+
+### Report structure
+
+Each report contains five sections:
+
+| Section | Content |
+|---------|---------|
+| **Executive Summary** | 1–2 sentence overall state of the system |
+| **Market Commentary** | Technical conditions — RSI levels, trend direction, price vs SMA-200 |
+| **Trade Rationale** | Why the bot made each recent trade — cites strategy name and signal values |
+| **Risk Assessment** | Current drawdown, position concentration, halt state |
+| **Outlook** | What conditions would trigger more trades; what to watch |
+
+Plus a **Key Takeaways** bullet list for quick scanning.
+
+### Configuration
+
+```bash
+# .env
+LLM_PROVIDER=openai               # "openai" or "anthropic"
+LLM_API_KEY=sk-...                # your API key
+LLM_MODEL=gpt-4o                  # or gpt-4o-mini / claude-3-5-sonnet-20241022
+LLM_MAX_TOKENS=1200               # max response tokens
+```
+
+**Supported models:**
+
+| Provider | Default | Fast/cheap alternative |
+|----------|---------|------------------------|
+| OpenAI | `gpt-4o` | `gpt-4o-mini` |
+| Anthropic | `claude-3-5-sonnet-20241022` | `claude-3-haiku-20240307` |
+
+**No API key:** Leave `LLM_API_KEY` blank. The endpoint returns an offline report built entirely from the platform's own computed data — same structure, no LLM cost, instant.
+
+### History
+
+`GET /api/ai/history?limit=10` returns the last N reports (in-memory, newest first). The dashboard history panel lets you click any past report to view it again.
+
+---
+
 ## Running a Backtest
 
 **Via Dashboard:**
@@ -187,37 +264,32 @@ Open the **Backtest** page (`/backtest`), fill in tickers, date range, and strat
 | **Bayesian Optimisation** | Finds best parameters for a strategy using Optuna TPE (5–200 trials) |
 | **Walk-Forward Validation** | Expanding-window OOS test across N folds — the proper overfitting check |
 
-**Via API:**
-
-```bash
-# Standard backtest
-curl -X POST http://127.0.0.1:8000/api/backtest/run \
-  -H "Content-Type: application/json" \
-  -d '{"tickers":["AAPL","MSFT"],"strategies":["momentum","kalman_trend"],"start_date":"2022-01-01","end_date":"2025-01-01","initial_capital":100000,"interval":"1d"}'
-
-# Bayesian optimisation (40 trials, maximise Sharpe)
-curl -X POST http://127.0.0.1:8000/api/optimize/run \
-  -H "Content-Type: application/json" \
-  -d '{"strategy":"kalman_trend","tickers":["AAPL","NVDA"],"start_date":"2022-01-01","end_date":"2025-01-01","n_trials":40,"objective":"sharpe"}'
-
-# Walk-forward validation
-curl -X POST http://127.0.0.1:8000/api/backtest/walkforward \
-  -H "Content-Type: application/json" \
-  -d '{"tickers":["AAPL","MSFT","NVDA"],"strategies":["momentum","vwap_reversion"],"start_date":"2020-01-01","end_date":"2025-01-01","n_splits":4,"oos_size_days":252}'
-```
-
 **Via CLI:**
 
 ```bash
 cd packages/quant-engine
 python -m backtesting.runner \
   --tickers AAPL MSFT NVDA \
-  --strategies momentum mean_reversion kalman_trend \
+  --strategies momentum mean_reversion \
   --start 2022-01-01 \
-  --end 2025-01-01 \
+  --end 2024-12-31 \
   --capital 100000 \
-  --output backtest_results.json
+  --output reports/result.json
 ```
+
+**Example backtest result** (Momentum + Mean Reversion on AAPL/MSFT/NVDA, 2022–2024):
+
+| Metric | Value |
+|--------|-------|
+| Final equity | $102,620 |
+| Total return | +2.62% |
+| Max drawdown | -2.75% |
+| Total trades | 237 |
+| Win rate | 29.5% |
+| Profit factor | 1.28× |
+| Mean Reversion PnL | +$2,887 |
+
+> 2022–2024 included one of the worst bear markets in decades. Mean Reversion is designed for ranging markets, which is why it outperformed in this period.
 
 ---
 
@@ -231,58 +303,11 @@ python -m backtesting.runner \
 | Market Making | `MarketMakingStrategy` | Avellaneda-Stoikov RL-adjusted bid/ask quotes; inventory skew | High-volume, tight spreads |
 | Sentiment | `SentimentStrategy` | FinBERT article sentiment z-score; decay weighting | Event-driven |
 | Macro Factor | `MacroFactorStrategy` | VIX regime × yield curve × earnings surprise multipliers | Regime-change |
-| **Kalman Trend** | `KalmanTrendStrategy` | 1D Kalman filter; trades normalised innovation `ν/√S` | Any trending |
-| **Kelly + Vol Target** | `KellyVolStrategy` | Fractional Kelly sizing; vol targeting scales position by σ_target/σ_realised | Low-vol regimes |
-| **VWAP Reversion** | `VWAPReversionStrategy` | VWAP deviation %; ATR volatility filter; volume confirmation | Intraday / institutional |
+| Kalman Trend | `KalmanTrendStrategy` | 1D Kalman filter; trades normalised innovation `ν/√S` | Any trending |
+| Kelly + Vol Target | `KellyVolStrategy` | Fractional Kelly sizing; vol targeting scales position by σ_target/σ_realised | Low-vol regimes |
+| VWAP Reversion | `VWAPReversionStrategy` | VWAP deviation %; ATR volatility filter; volume confirmation | Intraday / institutional |
 
 All strategies are configurable via `config/strategy_config.yaml` and toggleable at runtime via `PATCH /api/strategies/{id}` or the `/strategies` dashboard page.
-
----
-
-## Parameter Tuning
-
-The optimizer uses **Optuna TPE** (Tree-structured Parzen Estimator) — a Bayesian sequential model-based method that samples the most promising parameter region at each trial based on previous results. It is 10–20× more sample-efficient than grid search.
-
-```python
-from backtesting.optimizer import StrategyOptimizer
-from strategies.kalman_trend import KalmanTrendStrategy
-from strategies.orchestrator import StrategyOrchestrator
-
-def strategy_factory(trial):
-    cfg = StrategyOptimizer.kalman_trend_space(trial)
-    cfg["enabled"] = True
-    return KalmanTrendStrategy(config=cfg, tickers=["AAPL", "NVDA"])
-
-optimizer = StrategyOptimizer(
-    bars=bars_dict,          # dict[str, list[OHLCVBar]]
-    strategy_factory=strategy_factory,
-    orchestrator_factory=lambda strats: StrategyOrchestrator(strategies=strats, config={}),
-    n_trials=50,
-    objective="sharpe",      # sharpe | sortino | calmar | total_return
-)
-result = optimizer.run()
-print(result.best_params)   # {'observation_noise': 0.82, 'process_noise': 0.03, ...}
-print(result.best_value)    # 1.743
-```
-
-**Pre-defined search spaces:** `momentum_space`, `mean_reversion_space`, `kelly_vol_space`, `kalman_trend_space`, `vwap_reversion_space`.
-
-**Walk-forward usage:**
-
-```python
-from backtesting.walkforward import WalkForwardBacktest
-
-wfb = WalkForwardBacktest(
-    bars=bars_dict,
-    orchestrator_factory=make_orchestrator,   # called fresh each fold
-    n_splits=4,
-    oos_size_days=252,   # 1 trading year per fold
-    min_train_days=365,
-)
-results = wfb.run()
-print(results.aggregate_metrics())
-# {'sharpe_ratio': {'mean': 0.92, 'std': 0.34, 'min': 0.45, 'max': 1.37}, ...}
-```
 
 ---
 
@@ -349,7 +374,7 @@ The full AWS infrastructure baseline lives in [`infra/terraform/`](infra/terrafo
 - **ECS Fargate** — non-root (UID 1001), read-only rootfs, drop ALL capabilities
 - **RDS PostgreSQL 16** in private subnets, encrypted, deletion-protected
 - **S3** artifacts bucket (AES-256, versioned, Glacier lifecycle)
-- **Secrets Manager** for all API keys — never in task definition plaintext
+- **Secrets Manager** for all API keys (including `LLM_API_KEY`) — never in task definition plaintext
 - **IAM** least-privilege execution + task roles
 - **CloudWatch** log group, 90-day retention
 
@@ -370,6 +395,10 @@ All variables are documented in [`.env.example`](.env.example). Key variables:
 |----------|-------------|-------------|
 | `TRADING_MODE` | Always | `dev` / `paper` / `live` |
 | `DATABASE_URL` | Always | SQLite (dev) or PostgreSQL (prod) |
+| `LLM_PROVIDER` | AI Analyst | `openai` or `anthropic` (default: `openai`) |
+| `LLM_API_KEY` | AI Analyst (LLM mode) | OpenAI or Anthropic API key; blank = offline mode |
+| `LLM_MODEL` | AI Analyst | Model name override (default: `gpt-4o` / `claude-3-5-sonnet-20241022`) |
+| `LLM_MAX_TOKENS` | AI Analyst | Max response tokens (default: `1200`) |
 | `ALPACA_API_KEY` | Paper/live equities | Alpaca key |
 | `ALPACA_SECRET_KEY` | Paper/live equities | Alpaca secret |
 | `ALPACA_BASE_URL` | Paper/live | `https://paper-api.alpaca.markets` or live URL |

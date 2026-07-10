@@ -75,6 +75,7 @@ ml = [
     "scikit-learn>=1.5",
     "stable-baselines3>=2.3",
     "gymnasium>=0.29",
+    "optuna>=3.6",
 ]
 
 # ── API server ───────────────────────────────────────────────────────────────
@@ -82,6 +83,12 @@ api = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
     "python-multipart>=0.0.9",
+]
+
+# ── AI Analyst (optional — only needed if using LLM commentary) ──────────────
+ai = [
+    "openai>=1.35",
+    "anthropic>=0.28",
 ]
 
 # ── Development / testing ─────────────────────────────────────────────────────

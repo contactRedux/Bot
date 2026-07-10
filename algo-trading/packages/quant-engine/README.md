@@ -46,7 +46,8 @@ quant-engine/
 ├── execution/     TradingEngine (live loop), PaperBroker (partial-fill mode),
 │                  AlpacaBroker, BinanceBroker, BrokerFactory
 ├── api/           FastAPI REST + WebSocket server
-│   ├── routes/    backtest, news, optimize, portfolio, risk, signals, strategies, trading
+│   ├── routes/    ai_analyst, analysis, backtest, news, optimize, portfolio,
+│   │              risk, signals, strategies, trading
 │   ├── ws/        WebSocket feed (/ws/feed)
 │   ├── deps.py    AppState dependency injection + require_operator OIDC seam
 │   ├── schemas.py Pydantic request/response models
@@ -276,6 +277,59 @@ features = pipeline.build("AAPL", start, end)
 # NaN when no order book snapshot is available (e.g. during backtesting)
 ```
 
+## AI Analyst
+
+The AI Analyst (`api/routes/ai_analyst.py`) is a standalone endpoint that assembles live data from `AppState` and calls an LLM to produce a plain-English analyst report.
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/ai/analyse` | Generate a report for the given tickers and focus |
+| `GET` | `/api/ai/history` | Last N cached reports (in-memory) |
+
+### Request body
+
+```json
+{
+  "tickers":        ["AAPL", "MSFT"],  // empty = use active positions
+  "include_trades": true,
+  "include_news":   true,
+  "focus":          "full"            // full | risk | trades | market | outlook
+}
+```
+
+### Report fields
+
+```json
+{
+  "summary":            "...",
+  "market_commentary":  "...",
+  "trade_rationale":    "...",
+  "risk_assessment":    "...",
+  "outlook":            "...",
+  "key_points":         ["...", "..."],
+  "provider":           "openai",
+  "model":              "gpt-4o",
+  "context_snapshot":   {}   // full data payload sent to the LLM
+}
+```
+
+### Configuration
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `LLM_PROVIDER` | `openai` | `openai` or `anthropic` |
+| `LLM_API_KEY` | — | API key; blank enables offline rule-based fallback |
+| `LLM_MODEL` | `gpt-4o` / `claude-3-5-sonnet-20241022` | Model override |
+| `LLM_MAX_TOKENS` | `1200` | Max response tokens |
+
+**Offline mode:** when `LLM_API_KEY` is unset, `_offline_report()` generates all five sections deterministically from the same live data — no LLM call, no cost, identical response structure.
+
+**Optional deps:** install with `pip install -e ".[ai]"` to get `openai>=1.35` and `anthropic>=0.28`.
+
+---
+
 ## Known fixes applied
 
 | File | Issue | Fix |
@@ -284,6 +338,7 @@ features = pipeline.build("AAPL", start, end)
 | `data/feeds/alpaca_feed.py` | `stream.run()` conflicts with running asyncio event loop | Run stream in `ThreadPoolExecutor`; use `run_coroutine_threadsafe` for queue |
 | `backtesting/metrics.py` | CAGR computed from unsorted timestamps; `datetime.now()` seed skewed duration | Sort timestamps before computing `n_calendar_days` |
 | `api/main.py` | `StatArbStrategy` called with `tickers=` but constructor requires `pairs=` | Separate StatArb from generic strategy loop; construct with `pairs=` |
+| `backtesting/runner.py` | `get_settings` function doesn't exist; strategy constructors called with wrong arg order | Import `settings` singleton; use `config=` / `tickers=` keyword args |
 
 ## mypy status
 

@@ -16,6 +16,11 @@ POST /api/trading/stop
 POST /api/trading/tickers
     Replace the active ticker universe at runtime (restarts the engine).
 
+POST /api/trading/order
+    Submit a manual paper trade (BUY or SELL) through the PaperBroker.
+    Body: { "ticker": "AAPL", "side": "buy"|"sell", "quantity": 10.0,
+            "order_type": "market"|"limit", "limit_price": null }
+
 These endpoints are operator-protected in production (require the OIDC
 operator role).  In dev mode (no OIDC_ISSUER_URL set) they are open.
 """
@@ -25,6 +30,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from api.deps import AppState, get_app_state, require_operator
 
@@ -141,4 +147,117 @@ async def update_tickers(
         "success": True,
         "tickers": engine.tickers,
         "message": f"Tickers updated. Engine {'restarted' if was_running else 'ready (not running)'}.",
+    }
+
+
+class ManualOrderRequest(BaseModel):
+    ticker: str
+    side: str = Field(..., pattern="^(buy|sell)$")
+    quantity: float = Field(..., gt=0)
+    order_type: str = Field(default="market", pattern="^(market|limit)$")
+    limit_price: float | None = None
+
+
+@router.post("/order")
+async def manual_order(
+    request: Request,
+    body: ManualOrderRequest,
+    state: AppState = Depends(get_app_state),
+    _: None = Depends(require_operator),
+) -> dict:
+    """
+    Submit a manual paper trade through the broker.
+
+    In paper/dev mode this goes straight to the PaperBroker — no real money
+    changes hands.  The broker needs a mark price for the ticker; if none is
+    loaded yet, the order will be rejected with status ``rejected``.
+    """
+    from datetime import datetime, timezone
+    from strategies.base import Order, OrderSide, OrderType
+
+    broker = getattr(state, "broker", None)
+    if broker is None:
+        raise HTTPException(status_code=503, detail="Broker not initialised.")
+
+    # If the broker has no price yet for this ticker, try to seed it from
+    # the DataStore (latest bar close).
+    ticker = body.ticker.upper().strip()
+    if not hasattr(broker, "_prices") or broker._prices.get(ticker, 0.0) <= 0.0:
+        try:
+            from datetime import UTC, timedelta
+            store = state.data_store
+            if store is not None:
+                bars = store.read_bars(
+                    ticker=ticker,
+                    interval="1d",
+                    start=datetime.now(UTC) - timedelta(days=7),
+                    end=datetime.now(UTC),
+                )
+                if not bars:
+                    # fallback: on-demand yfinance fetch
+                    import asyncio
+                    from data.feeds.yfinance_feed import YFinanceFeed
+                    yf = YFinanceFeed()
+                    loop = asyncio.get_event_loop()
+                    bars = await loop.run_in_executor(
+                        None, yf.fetch_bars, ticker, "1d",
+                        datetime.now(UTC) - timedelta(days=7), datetime.now(UTC),
+                    )
+                if bars:
+                    broker.update_prices({ticker: bars[-1].close})
+        except Exception as exc:
+            logger.warning("manual_order.price_seed_failed ticker=%s error=%s", ticker, exc)
+
+    order = Order(
+        ticker=ticker,
+        side=OrderSide(body.side),
+        quantity=body.quantity,
+        order_type=OrderType(body.order_type),
+        limit_price=body.limit_price,
+        strategy_id="manual",
+        confidence=1.0,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    try:
+        fill = broker.submit_order(order)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Order failed: {exc}") from exc
+
+    # Feed the fill into the portfolio if available.
+    # backtesting.portfolio.Portfolio.on_fill() expects backtesting.events.FillEvent
+    # (which has .quantity), not execution.base.FillEvent (which has .filled_quantity).
+    portfolio = getattr(state, "portfolio", None)
+    if portfolio is not None and hasattr(portfolio, "on_fill") and fill.is_filled:
+        try:
+            from datetime import datetime, timezone
+            from backtesting.events import FillEvent as BtFillEvent
+            bt_fill = BtFillEvent(
+                timestamp=fill.timestamp,
+                ticker=fill.ticker,
+                side=fill.side,
+                quantity=fill.filled_quantity,
+                fill_price=fill.fill_price,
+                commission=fill.commission,
+                strategy_id=fill.strategy_id,
+            )
+            portfolio.on_fill(bt_fill)
+        except Exception as exc:
+            logger.warning("manual_order.portfolio_on_fill_error error=%s", exc)
+
+    logger.warning(
+        "AUDIT manual_order ticker=%s side=%s qty=%s status=%s fill_price=%s client=%s",
+        ticker, body.side, body.quantity, fill.status.value,
+        fill.fill_price, request.client.host if request.client else "unknown",
+    )
+
+    return {
+        "success": fill.is_filled,
+        "status": fill.status.value,
+        "ticker": ticker,
+        "side": body.side,
+        "quantity": fill.filled_quantity,
+        "fill_price": fill.fill_price,
+        "commission": fill.commission,
+        "broker_order_id": fill.broker_order_id,
     }

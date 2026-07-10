@@ -219,3 +219,38 @@ async def get_price_history(
         points=points,
         count=len(points),
     )
+
+
+@router.get("/metrics")
+async def get_portfolio_metrics(
+    state: AppState = Depends(get_app_state),
+) -> dict:
+    """
+    Return performance metrics for the live portfolio.
+
+    Reuses ``backtesting.metrics.compute_metrics`` on the live equity curve
+    and trade log so we get Sharpe, max drawdown, win rate etc. for the
+    current paper/live session.
+    """
+    pf = state.portfolio
+    if pf is None:
+        return {"error": "Portfolio not initialised"}
+
+    try:
+        from backtesting.metrics import compute_metrics
+        equity_curve = getattr(pf, "equity_curve", [])
+        trade_log    = getattr(pf, "trade_log", [])
+        initial_cap  = float(getattr(pf, "initial_capital", 100_000.0))
+        strategy_pnl = {
+            k: float(v) for k, v in getattr(pf, "_strategy_pnl", {}).items()
+        }
+        metrics = compute_metrics(
+            equity_curve=equity_curve,
+            trade_log=trade_log,
+            initial_capital=initial_cap,
+            strategy_attribution=strategy_pnl or None,
+        )
+        return metrics
+    except Exception as exc:
+        logger.exception("portfolio_metrics.compute_failed error=%s", exc)
+        return {"error": f"Could not compute metrics: {exc}"}

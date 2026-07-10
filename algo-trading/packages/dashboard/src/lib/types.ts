@@ -193,3 +193,101 @@ export interface NewsArticle {
   sentiment_label: "positive" | "negative" | "neutral";
   published_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// Analysis (from GET /api/analysis/{ticker})
+// ---------------------------------------------------------------------------
+
+export interface AnalysisIndicators {
+  rsi: number;
+  macd_line: number;
+  macd_signal: number;
+  bb_upper: number;
+  bb_mid: number;
+  bb_lower: number;
+  sma_20: number;
+  sma_50: number;
+  sma_200: number;
+  atr: number;
+}
+
+export interface AnalysisSignalScores {
+  rsi: number;
+  macd: number;
+  bollinger: number;
+  ma_trend: number;
+  short_trend: number;
+}
+
+export interface AnalysisPriceStats {
+  last_price: number;
+  pct_change_1d: number;
+  pct_change_1m: number;
+}
+
+export interface AnalysisResponse {
+  ticker: string;
+  rating: "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell";
+  composite_score: number;
+  confidence_pct: number;
+  reasoning: string[];
+  indicators: AnalysisIndicators;
+  signal_scores: AnalysisSignalScores;
+  price_stats: AnalysisPriceStats;
+  bar_count: number;
+  as_of: string;
+}
+
+// ---------------------------------------------------------------------------
+// Portfolio metrics (from GET /api/portfolio/metrics)
+// ---------------------------------------------------------------------------
+
+export interface PortfolioMetricsResponse {
+  total_return_pct: number;
+  cagr_pct: number;
+  sharpe_ratio: number;
+  sortino_ratio: number;
+  calmar_ratio: number;
+  max_drawdown_pct: number;
+  annual_volatility_pct: number;
+  n_trades: number;
+  n_wins: number;
+  n_losses: number;
+  win_rate_pct: number;
+  profit_factor: number;
+  avg_trade_pnl: number;
+  final_equity: number;
+  initial_capital: number;
+  total_pnl: number;
+  start_date: string | null;
+  end_date: string | null;
+  n_calendar_days: number;
+  strategy_attribution?: Record<string, number>;
+}
+
+// ---------------------------------------------------------------------------
+// AI Analyst (from POST /api/ai/analyse)
+// ---------------------------------------------------------------------------
+
+export interface AiAnalyseRequest {
+  tickers?: string[];
+  include_trades?: boolean;
+  include_news?: boolean;
+  focus?: "full" | "risk" | "trades" | "market" | "outlook";
+}
+
+export interface AiAnalystReport {
+  generated_at: string;
+  provider: string;          // "openai" | "anthropic" | "offline"
+  model: string;
+  tickers: string[];
+  focus: string;
+  summary: string;
+  market_commentary: string;
+  trade_rationale: string;
+  risk_assessment: string;
+  outlook: string;
+  key_points: string[];
+  raw_response: string;
+  context_snapshot: Record<string, unknown>;
+}

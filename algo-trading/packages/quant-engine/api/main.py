@@ -50,6 +50,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.deps import AppState
+from api.routes.ai_analyst import router as ai_analyst_router
+from api.routes.analysis import router as analysis_router
 from api.routes.backtest import router as backtest_router
 from api.routes.news import router as news_router
 from api.routes.optimize import router as optimize_router
@@ -368,6 +370,7 @@ app.add_middleware(
 )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
+app.include_router(analysis_router)
 app.include_router(backtest_router)
 app.include_router(news_router)
 app.include_router(optimize_router)

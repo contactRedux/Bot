@@ -1,12 +1,16 @@
 import { Routes, Route } from "react-router-dom";
 import NavBar from "@/components/NavBar";
+import AiAnalyst from "@/pages/AiAnalyst";
 import Overview from "@/pages/Overview";
 import BacktestExplorer from "@/pages/BacktestExplorer";
 import LiveMonitor from "@/pages/LiveMonitor";
 import NewsFeed from "@/pages/NewsFeed";
+import PortfolioMetrics from "@/pages/PortfolioMetrics";
 import RiskDashboard from "@/pages/RiskDashboard";
 import Strategies from "@/pages/Strategies";
 import StockChart from "@/pages/StockChart";
+import TickerAnalysis from "@/pages/TickerAnalysis";
+import WatchlistPage from "@/pages/WatchlistPage";
 import { useWebSocketFeed } from "@/hooks/useWebSocketFeed";
 
 /**
@@ -15,6 +19,9 @@ import { useWebSocketFeed } from "@/hooks/useWebSocketFeed";
  * Route map:
  *   /           → Overview          (portfolio summary + equity curve)
  *   /chart      → StockChart        (Yahoo-Finance-style price chart with time ranges)
+ *   /analysis   → TickerAnalysis    (composite technical analysis for any ticker)
+ *   /metrics    → PortfolioMetrics  (Sharpe, max drawdown, win rate etc.)
+ *   /watchlist  → WatchlistPage     (persistent watchlist + price alerts)
  *   /backtest   → BacktestExplorer  (configure + run backtests, view results)
  *   /live       → LiveMonitor       (real-time signals + fills + positions)
  *   /news       → NewsFeed          (headlines + FinBERT sentiment scores)
@@ -34,6 +41,10 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/chart" element={<StockChart />} />
+          <Route path="/analysis" element={<TickerAnalysis />} />
+          <Route path="/ai" element={<AiAnalyst />} />
+          <Route path="/metrics" element={<PortfolioMetrics />} />
+          <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/backtest" element={<BacktestExplorer />} />
           <Route path="/live" element={<LiveMonitor />} />
           <Route path="/news" element={<NewsFeed />} />

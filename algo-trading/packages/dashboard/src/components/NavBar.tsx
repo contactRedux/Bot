@@ -8,6 +8,10 @@ import { useWsStore, useTradingStore } from "@/store";
 const links = [
   { to: "/", label: "Overview" },
   { to: "/chart", label: "Charts" },
+  { to: "/watchlist", label: "Watchlist" },
+  { to: "/analysis", label: "Analysis" },
+  { to: "/ai", label: "AI Analyst" },
+  { to: "/metrics", label: "Metrics" },
   { to: "/live", label: "Live" },
   { to: "/strategies", label: "Strategies" },
   { to: "/backtest", label: "Backtest" },
