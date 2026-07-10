@@ -73,13 +73,13 @@ function MetricCard({
 }) {
   const color =
     positive === null || positive === undefined
-      ? "text-zinc-100"
+      ? "text-[#1d1d1f]"
       : positive
         ? "text-emerald-400"
         : "text-rose-400";
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 p-3">
-      <p className="text-xs text-zinc-500">{label}</p>
+    <div className="rounded-xl border border-[#e5e5ea] bg-white p-3">
+      <p className="text-xs text-[#6e6e73]">{label}</p>
       <p className={`mt-1 font-mono text-lg font-semibold ${color}`}>{value}</p>
     </div>
   );
@@ -87,7 +87,7 @@ function MetricCard({
 
 function ProgressBar({ pct }: { pct: number }) {
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-700">
+    <div className="h-2 w-full overflow-hidden rounded-full bg-[#f5f5f7]">
       <div
         className="h-full bg-sky-400 transition-all duration-300"
         style={{ width: `${pct}%` }}
@@ -107,9 +107,9 @@ const CurveTooltip = ({
 }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded border border-zinc-600 bg-zinc-800 px-3 py-2 text-xs shadow-lg">
-      <p className="mb-1 font-mono text-zinc-400">{label}</p>
-      <p className="font-mono font-semibold text-sky-400">
+    <div className="rounded border border-[#e5e5ea] bg-white px-3 py-2 text-xs shadow-lg">
+      <p className="mb-1 font-mono text-[#6e6e73]">{label}</p>
+      <p className="font-mono font-semibold text-[#007aff]">
         $
         {payload[0].value.toLocaleString("en-US", {
           minimumFractionDigits: 2,
@@ -258,19 +258,19 @@ export default function BacktestExplorer() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-zinc-100">Backtest Explorer</h1>
+        <h1 className="text-xl font-semibold text-[#1d1d1f]">Backtest Explorer</h1>
       </div>
 
       {/* ── Form ── */}
-      <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-5">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-zinc-400">
+      <div className="rounded-xl border border-[#e5e5ea] bg-white p-5">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-[#6e6e73]">
           Configuration
         </h2>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {/* Tickers */}
           <div className="sm:col-span-2 lg:col-span-1">
-            <label className="mb-1 block text-xs text-zinc-400">
+            <label className="mb-1 block text-xs text-[#6e6e73]">
               Tickers (comma separated)
             </label>
             <input
@@ -278,51 +278,51 @@ export default function BacktestExplorer() {
               value={tickerInput}
               onChange={(e) => setTickerInput(e.target.value)}
               placeholder="AAPL, MSFT, BTC-USD"
-              className="w-full rounded border border-zinc-600 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:border-sky-400 focus:outline-none"
+              className="w-full rounded border border-[#e5e5ea] bg-[#f5f5f7] px-3 py-2 font-mono text-sm text-[#1d1d1f] placeholder-[#8e8e93] focus:border-[#007aff] focus:outline-none"
             />
           </div>
 
           {/* Date range */}
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Start Date</label>
+            <label className="mb-1 block text-xs text-[#6e6e73]">Start Date</label>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full rounded border border-zinc-600 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-sky-400 focus:outline-none"
+              className="w-full rounded border border-[#e5e5ea] bg-[#f5f5f7] px-3 py-2 font-mono text-sm text-[#1d1d1f] focus:border-[#007aff] focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">End Date</label>
+            <label className="mb-1 block text-xs text-[#6e6e73]">End Date</label>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full rounded border border-zinc-600 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-sky-400 focus:outline-none"
+              className="w-full rounded border border-[#e5e5ea] bg-[#f5f5f7] px-3 py-2 font-mono text-sm text-[#1d1d1f] focus:border-[#007aff] focus:outline-none"
             />
           </div>
 
           {/* Capital */}
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Initial Capital ($)</label>
+            <label className="mb-1 block text-xs text-[#6e6e73]">Initial Capital ($)</label>
             <input
               type="number"
               value={capital}
               onChange={(e) => setCapital(Number(e.target.value))}
               min={1000}
               step={10000}
-              className="w-full rounded border border-zinc-600 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-sky-400 focus:outline-none"
+              className="w-full rounded border border-[#e5e5ea] bg-[#f5f5f7] px-3 py-2 font-mono text-sm text-[#1d1d1f] focus:border-[#007aff] focus:outline-none"
             />
           </div>
 
           {/* Interval */}
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Bar Interval</label>
+            <label className="mb-1 block text-xs text-[#6e6e73]">Bar Interval</label>
             <select
               value={interval}
               onChange={(e) => setInterval(e.target.value)}
-              className="w-full rounded border border-zinc-600 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-sky-400 focus:outline-none"
+              className="w-full rounded border border-[#e5e5ea] bg-[#f5f5f7] px-3 py-2 font-mono text-sm text-[#1d1d1f] focus:border-[#007aff] focus:outline-none"
             >
               {INTERVALS.map((i) => (
                 <option key={i} value={i}>
@@ -352,7 +352,7 @@ export default function BacktestExplorer() {
 
         {/* Strategies */}
         <div className="mt-4">
-          <p className="mb-2 text-xs text-zinc-400">Strategies</p>
+          <p className="mb-2 text-xs text-[#6e6e73]">Strategies</p>
           <div className="flex flex-wrap gap-2">
             {ALL_STRATEGIES.map((s) => (
               <button
@@ -360,8 +360,8 @@ export default function BacktestExplorer() {
                 onClick={() => toggleStrategy(s)}
                 className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
                   strategies.includes(s)
-                    ? "bg-sky-500/20 text-sky-400 ring-1 ring-sky-400/30"
-                    : "bg-zinc-700 text-zinc-400 hover:text-zinc-200"
+                    ? "bg-[#007aff]/10 text-[#007aff] ring-1 ring-sky-400/30"
+                    : "bg-[#f5f5f7] text-[#6e6e73] hover:text-[#1d1d1f]"
                 }`}
               >
                 {s}
@@ -384,11 +384,11 @@ export default function BacktestExplorer() {
 
       {/* ── Progress ── */}
       {running && (
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
-          <div className="mb-2 flex items-center justify-between text-xs text-zinc-400">
+        <div className="rounded-xl border border-[#e5e5ea] bg-white p-4">
+          <div className="mb-2 flex items-center justify-between text-xs text-[#6e6e73]">
             <span>
               {statusMsg || "Running backtest…"}{" "}
-              {runId && <span className="font-mono text-zinc-600">({runId.slice(0, 8)}…)</span>}
+              {runId && <span className="font-mono text-[#8e8e93]">({runId.slice(0, 8)}…)</span>}
             </span>
             <span className="font-mono">{progress.toFixed(0)}%</span>
           </div>
@@ -414,7 +414,7 @@ export default function BacktestExplorer() {
           )}
 
           {/* Header */}
-          <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-500">
+          <div className="flex flex-wrap items-center gap-4 text-xs text-[#6e6e73]">
             <span className="rounded-full bg-emerald-500/15 px-3 py-0.5 font-medium text-emerald-400">
               Completed
             </span>
@@ -422,7 +422,7 @@ export default function BacktestExplorer() {
               {result.tickers.join(", ")} · {result.bar_interval} · $
               {result.initial_capital.toLocaleString()}
             </span>
-            <span className="font-mono text-zinc-600">{result.run_id.slice(0, 12)}…</span>
+            <span className="font-mono text-[#8e8e93]">{result.run_id.slice(0, 12)}…</span>
           </div>
 
           {/* Metric cards */}
@@ -469,8 +469,8 @@ export default function BacktestExplorer() {
 
           {/* Equity curve */}
           {chartData.length > 0 && (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            <div className="rounded-xl border border-[#e5e5ea] bg-white p-4">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#6e6e73]">
                 Equity Curve
               </h3>
               <ResponsiveContainer width="100%" height={220}>
@@ -515,8 +515,8 @@ export default function BacktestExplorer() {
 
           {/* Strategy attribution */}
           {Object.keys(attribution).length > 0 && (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            <div className="rounded-xl border border-[#e5e5ea] bg-white p-4">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#6e6e73]">
                 Strategy Attribution (Realised P&L)
               </h3>
               <div className="space-y-2">
@@ -528,14 +528,14 @@ export default function BacktestExplorer() {
                   return (
                     <div key={sid}>
                       <div className="mb-0.5 flex items-center justify-between text-xs">
-                        <span className="text-zinc-400">{sid}</span>
+                        <span className="text-[#6e6e73]">{sid}</span>
                         <span
                           className={`font-mono font-semibold ${pnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}
                         >
                           {fmtUsd(pnl)}
                         </span>
                       </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-700">
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#f5f5f7]">
                         <div
                           className={`h-full ${pnl >= 0 ? "bg-emerald-400" : "bg-rose-400"}`}
                           style={{ width: `${pct}%` }}
@@ -550,19 +550,19 @@ export default function BacktestExplorer() {
 
           {/* Trade log */}
           {result.trade_log && result.trade_log.length > 0 && (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800">
-              <div className="flex items-center justify-between border-b border-zinc-700 px-4 py-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            <div className="rounded-xl border border-[#e5e5ea] bg-white">
+              <div className="flex items-center justify-between border-b border-[#e5e5ea] px-4 py-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[#6e6e73]">
                   Trade Log
                 </span>
-                <span className="rounded-full bg-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-400">
+                <span className="rounded-full bg-[#f5f5f7] px-2 py-0.5 font-mono text-xs text-[#6e6e73]">
                   {result.trade_log.length}
                 </span>
               </div>
               <div className="max-h-96 overflow-auto">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-zinc-800">
-                    <tr className="text-left text-zinc-500">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="text-left text-[#6e6e73]">
                       <th className="px-4 py-2">Time</th>
                       <th className="px-4 py-2">Ticker</th>
                       <th className="px-4 py-2">Side</th>
@@ -580,12 +580,12 @@ export default function BacktestExplorer() {
                       return (
                         <tr
                           key={i}
-                          className="border-t border-zinc-700/50 hover:bg-zinc-700/20"
+                          className="border-t border-[#e5e5ea]/50 hover:bg-[#f5f5f7]/20"
                         >
-                          <td className="px-4 py-1.5 font-mono text-zinc-500">
+                          <td className="px-4 py-1.5 font-mono text-[#6e6e73]">
                             {String(t.timestamp ?? "").slice(0, 16).replace("T", " ")}
                           </td>
-                          <td className="px-4 py-1.5 font-mono font-semibold text-sky-400">
+                          <td className="px-4 py-1.5 font-mono font-semibold text-[#007aff]">
                             {String(t.ticker ?? "")}
                           </td>
                           <td className="px-4 py-1.5">
@@ -599,10 +599,10 @@ export default function BacktestExplorer() {
                               {side.toUpperCase()}
                             </span>
                           </td>
-                          <td className="px-4 py-1.5 text-right font-mono text-zinc-300">
+                          <td className="px-4 py-1.5 text-right font-mono text-[#3a3a3c]">
                             {String(t.quantity ?? "")}
                           </td>
-                          <td className="px-4 py-1.5 text-right font-mono text-zinc-300">
+                          <td className="px-4 py-1.5 text-right font-mono text-[#3a3a3c]">
                             ${Number(t.fill_price ?? 0).toFixed(2)}
                           </td>
                           <td
@@ -612,7 +612,7 @@ export default function BacktestExplorer() {
                           >
                             {fmtUsd(pnl)}
                           </td>
-                          <td className="px-4 py-1.5 text-zinc-500">
+                          <td className="px-4 py-1.5 text-[#6e6e73]">
                             {String(t.strategy_id ?? "")}
                           </td>
                         </tr>
@@ -700,11 +700,11 @@ function OptimizerPanel({
   const allTrials  = (result?.all_trials as Array<Record<string,unknown>> | undefined) ?? [];
 
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-5 space-y-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
+    <div className="rounded-xl border border-[#e5e5ea] bg-white p-5 space-y-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-[#6e6e73]">
         Bayesian Parameter Optimisation (Optuna TPE)
       </h2>
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-[#6e6e73]">
         Finds the best strategy parameters on your backtest date range using Tree-structured
         Parzen Estimator search. Uses the same tickers / dates / capital from the form above.
       </p>
@@ -712,24 +712,24 @@ function OptimizerPanel({
       {/* Controls */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div>
-          <label className="mb-1 block text-xs text-zinc-400">Strategy</label>
+          <label className="mb-1 block text-xs text-[#6e6e73]">Strategy</label>
           <select value={strategy} onChange={e => setStrategy(e.target.value)}
-            className="w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:border-sky-400 focus:outline-none">
+            className="w-full rounded border border-[#e5e5ea] bg-[#f5f5f7] px-2 py-1.5 text-sm text-[#1d1d1f] focus:border-[#007aff] focus:outline-none">
             {OPTIMIZABLE_STRATEGIES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs text-zinc-400">Objective</label>
+          <label className="mb-1 block text-xs text-[#6e6e73]">Objective</label>
           <select value={objective} onChange={e => setObjective(e.target.value)}
-            className="w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:border-sky-400 focus:outline-none">
+            className="w-full rounded border border-[#e5e5ea] bg-[#f5f5f7] px-2 py-1.5 text-sm text-[#1d1d1f] focus:border-[#007aff] focus:outline-none">
             {["sharpe","sortino","calmar","total_return"].map(o => <option key={o} value={o}>{o}</option>)}
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs text-zinc-400">Trials</label>
+          <label className="mb-1 block text-xs text-[#6e6e73]">Trials</label>
           <input type="number" value={nTrials} min={5} max={200} step={5}
             onChange={e => setNTrials(Number(e.target.value))}
-            className="w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1.5 font-mono text-sm text-zinc-100 focus:border-sky-400 focus:outline-none" />
+            className="w-full rounded border border-[#e5e5ea] bg-[#f5f5f7] px-2 py-1.5 font-mono text-sm text-[#1d1d1f] focus:border-[#007aff] focus:outline-none" />
         </div>
         <div className="flex items-end">
           <button onClick={handleRun} disabled={busy}
@@ -739,19 +739,19 @@ function OptimizerPanel({
         </div>
       </div>
 
-      {statusMsg && <p className="text-xs text-zinc-400">{statusMsg}</p>}
+      {statusMsg && <p className="text-xs text-[#6e6e73]">{statusMsg}</p>}
       {error && <p className="text-xs text-rose-400">{error}</p>}
 
       {/* Best params */}
       {bestParams && Object.keys(bestParams).length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#6e6e73]">
             Best Parameters — {objective} = {Number(result?.best_value).toFixed(4)}
           </p>
           <div className="flex flex-wrap gap-2">
             {Object.entries(bestParams).map(([k, v]) => (
-              <span key={k} className="rounded border border-zinc-600 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-200">
-                <span className="text-zinc-500">{k}:</span> {typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(4)) : String(v)}
+              <span key={k} className="rounded border border-[#e5e5ea] bg-[#f5f5f7] px-2 py-1 font-mono text-xs text-[#1d1d1f]">
+                <span className="text-[#6e6e73]">{k}:</span> {typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(4)) : String(v)}
               </span>
             ))}
           </div>
@@ -761,7 +761,7 @@ function OptimizerPanel({
       {/* Trial chart */}
       {allTrials.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#6e6e73]">
             Trial Values ({allTrials.length} trials)
           </p>
           <ResponsiveContainer width="100%" height={140}>
@@ -842,23 +842,23 @@ function WalkForwardPanel({
   const agg   = result?.aggregate_metrics as Record<string, Record<string,number>> | undefined;
 
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-5 space-y-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
+    <div className="rounded-xl border border-[#e5e5ea] bg-white p-5 space-y-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-[#6e6e73]">
         Walk-Forward Out-of-Sample Validation
       </h2>
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-[#6e6e73]">
         Repeatedly trains on expanding in-sample windows and evaluates on the next OOS fold.
         Prevents look-ahead bias and overfitting — this is how hedge funds validate strategies.
       </p>
 
       {/* Strategy selection */}
       <div>
-        <p className="mb-2 text-xs text-zinc-400">Strategies</p>
+        <p className="mb-2 text-xs text-[#6e6e73]">Strategies</p>
         <div className="flex flex-wrap gap-2">
           {ALL_STRATEGIES.map(s => (
             <button key={s} onClick={() => toggleWfStrategy(s)}
               className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-                wfStrategies.includes(s) ? "bg-sky-500/20 text-sky-400 ring-1 ring-sky-400/30" : "bg-zinc-700 text-zinc-400 hover:text-zinc-200"
+                wfStrategies.includes(s) ? "bg-[#007aff]/10 text-[#007aff] ring-1 ring-sky-400/30" : "bg-[#f5f5f7] text-[#6e6e73] hover:text-[#1d1d1f]"
               }`}>{s}</button>
           ))}
         </div>
@@ -867,16 +867,16 @@ function WalkForwardPanel({
       {/* Controls */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div>
-          <label className="mb-1 block text-xs text-zinc-400">OOS Folds</label>
+          <label className="mb-1 block text-xs text-[#6e6e73]">OOS Folds</label>
           <input type="number" value={nSplits} min={2} max={10}
             onChange={e => setNSplits(Number(e.target.value))}
-            className="w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1.5 font-mono text-sm text-zinc-100 focus:border-sky-400 focus:outline-none" />
+            className="w-full rounded border border-[#e5e5ea] bg-[#f5f5f7] px-2 py-1.5 font-mono text-sm text-[#1d1d1f] focus:border-[#007aff] focus:outline-none" />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-zinc-400">OOS Days / Fold</label>
+          <label className="mb-1 block text-xs text-[#6e6e73]">OOS Days / Fold</label>
           <input type="number" value={oosDays} min={63} max={756} step={21}
             onChange={e => setOosDays(Number(e.target.value))}
-            className="w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1.5 font-mono text-sm text-zinc-100 focus:border-sky-400 focus:outline-none" />
+            className="w-full rounded border border-[#e5e5ea] bg-[#f5f5f7] px-2 py-1.5 font-mono text-sm text-[#1d1d1f] focus:border-[#007aff] focus:outline-none" />
         </div>
         <div className="sm:col-span-2 flex items-end">
           <button onClick={handleRun} disabled={busy || wfStrategies.length === 0}
@@ -886,13 +886,13 @@ function WalkForwardPanel({
         </div>
       </div>
 
-      {statusMsg && <p className="text-xs text-zinc-400">{statusMsg}</p>}
+      {statusMsg && <p className="text-xs text-[#6e6e73]">{statusMsg}</p>}
       {error && <p className="text-xs text-rose-400">{error}</p>}
 
       {/* Aggregate metrics */}
       {agg && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#6e6e73]">
             Aggregate OOS Metrics (mean ± std across {folds.length} folds)
           </p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -900,10 +900,10 @@ function WalkForwardPanel({
               const d = agg[k];
               if (!d) return null;
               return (
-                <div key={k} className="rounded border border-zinc-700 bg-zinc-900 p-2 text-center">
-                  <p className="text-xs text-zinc-500">{k.replace(/_/g, " ")}</p>
-                  <p className="font-mono text-sm font-semibold text-zinc-100">{d.mean.toFixed(2)}</p>
-                  <p className="font-mono text-xs text-zinc-600">±{d.std.toFixed(2)}</p>
+                <div key={k} className="rounded border border-[#e5e5ea] bg-[#f5f5f7] p-2 text-center">
+                  <p className="text-xs text-[#6e6e73]">{k.replace(/_/g, " ")}</p>
+                  <p className="font-mono text-sm font-semibold text-[#1d1d1f]">{d.mean.toFixed(2)}</p>
+                  <p className="font-mono text-xs text-[#8e8e93]">±{d.std.toFixed(2)}</p>
                 </div>
               );
             })}
@@ -913,10 +913,10 @@ function WalkForwardPanel({
 
       {/* Per-fold table */}
       {folds.length > 0 && (
-        <div className="overflow-hidden rounded border border-zinc-700">
+        <div className="overflow-hidden rounded border border-[#e5e5ea]">
           <table className="w-full text-xs">
-            <thead className="bg-zinc-900">
-              <tr className="text-left text-zinc-500">
+            <thead className="bg-[#f5f5f7]">
+              <tr className="text-left text-[#6e6e73]">
                 <th className="px-3 py-2">Fold</th>
                 <th className="px-3 py-2">OOS Start</th>
                 <th className="px-3 py-2">OOS End</th>
@@ -932,15 +932,15 @@ function WalkForwardPanel({
                 const m = f.metrics as Record<string, number> | undefined;
                 const ret = m?.total_return_pct ?? 0;
                 return (
-                  <tr key={i} className="border-t border-zinc-700/50 hover:bg-zinc-700/20">
-                    <td className="px-3 py-1.5 font-mono font-semibold text-zinc-400">F{i + 1}</td>
-                    <td className="px-3 py-1.5 font-mono text-zinc-500">{String(f.oos_start ?? "").slice(0, 10)}</td>
-                    <td className="px-3 py-1.5 font-mono text-zinc-500">{String(f.oos_end ?? "").slice(0, 10)}</td>
+                  <tr key={i} className="border-t border-[#e5e5ea]/50 hover:bg-[#f5f5f7]/20">
+                    <td className="px-3 py-1.5 font-mono font-semibold text-[#6e6e73]">F{i + 1}</td>
+                    <td className="px-3 py-1.5 font-mono text-[#6e6e73]">{String(f.oos_start ?? "").slice(0, 10)}</td>
+                    <td className="px-3 py-1.5 font-mono text-[#6e6e73]">{String(f.oos_end ?? "").slice(0, 10)}</td>
                     <td className={`px-3 py-1.5 text-right font-mono ${ret >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{ret.toFixed(2)}%</td>
-                    <td className="px-3 py-1.5 text-right font-mono text-zinc-300">{(m?.sharpe_ratio ?? 0).toFixed(3)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-[#3a3a3c]">{(m?.sharpe_ratio ?? 0).toFixed(3)}</td>
                     <td className="px-3 py-1.5 text-right font-mono text-rose-400">-{(m?.max_drawdown_pct ?? 0).toFixed(2)}%</td>
-                    <td className="px-3 py-1.5 text-right font-mono text-zinc-400">{m?.n_trades ?? 0}</td>
-                    <td className="px-3 py-1.5 text-right font-mono text-zinc-400">{(m?.win_rate_pct ?? 0).toFixed(1)}%</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-[#6e6e73]">{m?.n_trades ?? 0}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-[#6e6e73]">{(m?.win_rate_pct ?? 0).toFixed(1)}%</td>
                   </tr>
                 );
               })}

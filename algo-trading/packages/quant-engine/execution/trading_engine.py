@@ -564,9 +564,10 @@ class TradingEngine:
         """
         Return the number of seconds to sleep between loop iterations.
 
-        In dev mode the cadence is always 60 s so you can observe the engine
-        without waiting 24 h for a daily bar.
+        Dev and paper modes both use 60 s so that the engine is observable
+        without waiting a full bar interval (1 h or 1 d).  Live mode uses the
+        true bar cadence to avoid excessive API calls.
         """
-        if self.trading_mode == "dev":
+        if self.trading_mode in ("dev", "paper"):
             return _DEV_POLL_SECONDS
         return _INTERVAL_SECONDS.get(self.bar_interval, 3600)

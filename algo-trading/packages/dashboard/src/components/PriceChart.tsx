@@ -1,27 +1,21 @@
 /**
  * components/PriceChart.tsx
  *
- * Line chart for a selected ticker with:
- *  - Close price line (sky-400)
- *  - EMA-20 overlay (emerald-400, dashed)
- *  - Signal markers rendered as reference dots (▲ buy = emerald, ▼ sell = rose)
- *
- * Data is fetched from GET /portfolio/positions for available tickers,
- * then GET /signals/latest to get signal positions.
- *
- * Recharts doesn't ship a built-in candlestick; we use a ComposedChart with
- * a Line for close price and scatter-style ReferenceDots for signals.
+ * Apple-style area chart for a selected ticker:
+ *  - Gradient-filled area (green when positive, red when negative)
+ *  - EMA-20 overlay (dashed)
+ *  - Signal markers as ReferenceDots
+ *  - No grid lines, minimal axes
  */
 import {
   ComposedChart,
+  Area,
   Line,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   ReferenceDot,
-  Legend,
 } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSignals } from "@/lib/api";
@@ -35,11 +29,9 @@ interface PricePoint {
 
 interface Props {
   ticker: string;
-  /** Price data supplied by parent (loaded from DataStore via REST) */
   data: PricePoint[];
 }
 
-// Compute EMA on a series of closes
 function computeEma(closes: number[], period = 20): (number | undefined)[] {
   const k = 2 / (period + 1);
   const result: (number | undefined)[] = new Array(closes.length).fill(undefined);
@@ -57,7 +49,6 @@ function computeEma(closes: number[], period = 20): (number | undefined)[] {
   return result;
 }
 
-// Custom tooltip
 const ChartTooltip = ({
   active,
   payload,
@@ -69,8 +60,8 @@ const ChartTooltip = ({
 }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded border border-zinc-600 bg-zinc-800 px-3 py-2 text-xs shadow-lg">
-      <p className="mb-1 font-mono text-zinc-400">{label}</p>
+    <div className="rounded-lg border border-[#e5e5ea] bg-white px-3 py-2 text-xs shadow-sm">
+      <p className="mb-1 font-mono text-[#6e6e73]">{label}</p>
       {payload.map((p) => (
         <p key={p.name} style={{ color: p.color }}>
           {p.name}: <span className="font-mono font-semibold">{p.value.toFixed(2)}</span>
@@ -87,54 +78,62 @@ export default function PriceChart({ ticker, data }: Props) {
     refetchInterval: 5_000,
   });
 
-  const closes = data.map((d) => d.close);
-  const emas = computeEma(closes);
+  const closes  = data.map((d) => d.close);
+  const emas    = computeEma(closes);
   const enriched = data.map((d, i) => ({ ...d, ema20: emas[i] }));
 
-  // Signals for this ticker
+  const firstClose = enriched[0]?.close ?? 0;
+  const lastClose  = enriched[enriched.length - 1]?.close ?? 0;
+  const isPositive = lastClose >= firstClose;
+  const chartColor = isPositive ? "#30d158" : "#ff3b30";
+
   const signals: SignalItem[] = (signalsData?.signals ?? []).filter(
     (s) => s.ticker === ticker,
   );
 
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
+    <div className="rounded-xl border border-[#e5e5ea] bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-mono text-sm font-semibold text-zinc-100">{ticker}</h2>
-        <span className="text-xs text-zinc-500">Close · EMA-20 · Signals</span>
+        <h2 className="text-sm font-semibold text-[#1d1d1f]">{ticker}</h2>
+        <span className="text-xs text-[#6e6e73]">Close · EMA-20 · Signals</span>
       </div>
 
       {data.length === 0 ? (
-        <p className="py-12 text-center text-sm text-zinc-500">No price data available</p>
+        <p className="py-12 text-center text-sm text-[#6e6e73]">No price data available</p>
       ) : (
         <ResponsiveContainer width="100%" height={280}>
           <ComposedChart data={enriched} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
+            <defs>
+              <linearGradient id="priceAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%"  stopColor={chartColor} stopOpacity={0.18} />
+                <stop offset="95%" stopColor={chartColor} stopOpacity={0}    />
+              </linearGradient>
+            </defs>
             <XAxis
               dataKey="time"
-              tick={{ fill: "#a1a1aa", fontSize: 11 }}
+              tick={{ fill: "#6e6e73", fontSize: 11 }}
               tickLine={false}
+              axisLine={false}
               minTickGap={60}
             />
             <YAxis
               domain={["auto", "auto"]}
-              tick={{ fill: "#a1a1aa", fontSize: 11 }}
+              tick={{ fill: "#6e6e73", fontSize: 11 }}
               tickLine={false}
+              axisLine={false}
               width={58}
               tickFormatter={(v: number) => v.toFixed(0)}
             />
             <Tooltip content={<ChartTooltip />} />
-            <Legend
-              wrapperStyle={{ fontSize: 11, color: "#a1a1aa" }}
-              iconType="line"
-            />
 
-            {/* Close price */}
-            <Line
+            {/* Close price area */}
+            <Area
               type="monotone"
               dataKey="close"
               name="Close"
-              stroke="#38bdf8"
+              stroke={chartColor}
               strokeWidth={1.5}
+              fill="url(#priceAreaGrad)"
               dot={false}
               activeDot={{ r: 3 }}
             />
@@ -144,7 +143,7 @@ export default function PriceChart({ ticker, data }: Props) {
               type="monotone"
               dataKey="ema20"
               name="EMA 20"
-              stroke="#34d399"
+              stroke="#007aff"
               strokeWidth={1}
               strokeDasharray="4 3"
               dot={false}
@@ -158,13 +157,13 @@ export default function PriceChart({ ticker, data }: Props) {
                 x={s.timestamp.slice(0, 10)}
                 yAxisId={0}
                 r={5}
-                fill={s.signal > 0 ? "#34d399" : "#fb7185"}
+                fill={s.signal > 0 ? "#30d158" : "#ff3b30"}
                 stroke="none"
                 label={{
                   value: s.signal > 0 ? "▲" : "▼",
                   position: s.signal > 0 ? "top" : "bottom",
                   fontSize: 11,
-                  fill: s.signal > 0 ? "#34d399" : "#fb7185",
+                  fill: s.signal > 0 ? "#30d158" : "#ff3b30",
                 }}
               />
             ))}

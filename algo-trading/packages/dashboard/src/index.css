@@ -1,21 +1,21 @@
 @import "tailwindcss";
 
 /*
- * Global dark-mode base styles for the trading terminal.
- * The Tailwind "dark" class is set on <html> in index.html.
+ * Global Apple-light base styles for the trading dashboard.
  *
- * Colour palette:
- *   Background:     zinc-900  (#18181b)
- *   Panel surface:  zinc-800  (#27272a)
- *   Border:         zinc-700  (#3f3f46)
- *   Positive/Long:  emerald-400 (#34d399)
- *   Negative/Short: rose-400    (#fb7185)
- *   Accent/Info:    sky-400     (#38bdf8)
- *   Muted text:     zinc-400    (#a1a1aa)
+ * Colour palette (Apple Stocks aesthetic):
+ *   Background:     #ffffff
+ *   Surface:        #f5f5f7
+ *   Border:         #e5e5ea
+ *   Text:           #1d1d1f
+ *   Secondary text: #6e6e73
+ *   Positive:       #30d158 (Apple green)
+ *   Negative:       #ff3b30 (Apple red)
+ *   Accent/Info:    #007aff (Apple blue)
  */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {
@@ -25,29 +25,31 @@
 body {
   margin: 0;
   font-family:
-    "Inter",
-    system-ui,
     -apple-system,
+    "SF Pro Display",
     BlinkMacSystemFont,
+    "Helvetica Neue",
     "Segoe UI",
     sans-serif;
+  background-color: #ffffff;
+  color: #1d1d1f;
 }
 
-/* Scrollbar styling for a terminal aesthetic */
+/* Scrollbar styling — minimal, light */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #18181b;
+  background: #f5f5f7;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: #c7c7cc;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: #aeaeb2;
 }

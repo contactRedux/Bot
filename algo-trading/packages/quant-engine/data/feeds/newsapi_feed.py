@@ -61,16 +61,116 @@ def _make_article_id(source: str, title: str, published_at: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
+# Map ticker symbol → common name variants for better attribution.
+# Articles often say "Apple" or "Microsoft" rather than "AAPL" or "MSFT".
+_TICKER_ALIASES: dict[str, list[str]] = {
+    # Large-cap tech
+    "AAPL":    ["apple", "aapl", "iphone", "ipad", "macbook", "apple inc"],
+    "MSFT":    ["microsoft", "msft", "azure", "windows", "copilot", "activision"],
+    "NVDA":    ["nvidia", "nvda", "cuda", "geforce", "jensen huang"],
+    "TSLA":    ["tesla", "tsla", "elon musk", "elon", "cybertruck", "gigafactory"],
+    "AMZN":    ["amazon", "amzn", "aws", "prime", "bezos"],
+    "GOOGL":   ["google", "alphabet", "googl", "gemini", "waymo", "deepmind"],
+    "GOOG":    ["google", "alphabet", "goog"],
+    "META":    ["meta", "facebook", "instagram", "whatsapp", "zuckerberg", "threads"],
+    "NFLX":    ["netflix", "nflx"],
+    "ORCL":    ["oracle", "orcl"],
+    "CRM":     ["salesforce", "crm"],
+    "ADBE":    ["adobe", "adbe"],
+    "UBER":    ["uber"],
+    "LYFT":    ["lyft"],
+    "SNAP":    ["snapchat", "snap"],
+    "PINS":    ["pinterest", "pins"],
+    "SPOT":    ["spotify", "spot"],
+    # Semiconductors / hardware
+    "AMD":     ["amd", "advanced micro devices", "radeon", "ryzen", "epyc", "lisa su"],
+    "INTC":    ["intel", "intc", "gelsinger"],
+    "QCOM":    ["qualcomm", "qcom", "snapdragon"],
+    "MU":      ["micron", " mu ", "dram", "nand"],
+    "AVGO":    ["broadcom", "avgo"],
+    "TSM":     ["tsmc", "taiwan semiconductor", "tsm"],
+    "AMAT":    ["applied materials", "amat"],
+    "SNDK":    ["sandisk", "sndk", "western digital", "wdc"],
+    "LRCX":    ["lam research", "lrcx"],
+    "KLAC":    ["kla", "klac"],
+    "ASML":    ["asml"],
+    "TXN":     ["texas instruments", "txn"],
+    "MRVL":    ["marvell", "mrvl"],
+    # ETFs / indices
+    "SPY":     ["spy", "s&p 500", "s&p500", "spdr"],
+    "QQQ":     ["qqq", "nasdaq 100", "nasdaq-100", "invesco qqq"],
+    "VOO":     ["voo", "vanguard s&p"],
+    "IWM":     ["iwm", "russell 2000"],
+    "GLD":     ["gold", "gld"],
+    "SLV":     ["silver", "slv"],
+    "SMH":     ["smh", "semiconductor etf", "van eck semiconductor"],
+    "XLF":     ["xlf", "financial sector"],
+    "XLE":     ["xle", "energy sector"],
+    # Crypto
+    "BTC-USD": ["bitcoin", "btc", "satoshi", "cryptocurrency"],
+    "ETH-USD": ["ethereum", "eth", "ether", "vitalik"],
+    "SOL-USD": ["solana", "sol"],
+    "BNB-USD": ["binance", "bnb"],
+    # Financials
+    "JPM":     ["jpmorgan", "jp morgan", "jpm", "jamie dimon"],
+    "GS":      ["goldman sachs", "goldman", "gs"],
+    "BAC":     ["bank of america", "bac"],
+    "MS":      ["morgan stanley"],
+    "WFC":     ["wells fargo", "wfc"],
+    "C":       ["citigroup", "citibank", "citi"],
+    "V":       ["visa"],
+    "MA":      ["mastercard"],
+    "PYPL":    ["paypal", "pypl", "venmo"],
+    "SQ":      ["block", "square", "cash app"],
+    "COIN":    ["coinbase", "coin"],
+    # Consumer / retail
+    "WMT":     ["walmart", "wmt"],
+    "TGT":     ["target", "tgt"],
+    "COST":    ["costco", "cost"],
+    "HD":      ["home depot", " hd "],
+    "NKE":     ["nike", "nke"],
+    "SBUX":    ["starbucks", "sbux"],
+    "MCD":     ["mcdonald", "mcd"],
+    "KO":      ["coca-cola", "coca cola", "coke"],
+    "PEP":     ["pepsi", "pepsico", "pep"],
+    "BABA":    ["alibaba", "baba"],
+    "SHOP":    ["shopify", "shop"],
+    # Healthcare / biotech
+    "JNJ":     ["johnson & johnson", "j&j", "jnj"],
+    "PFE":     ["pfizer", "pfe"],
+    "MRNA":    ["moderna", "mrna"],
+    "LLY":     ["eli lilly", "lly"],
+    "ABBV":    ["abbvie", "abbv"],
+    "BMY":     ["bristol", "bmy"],
+    # Energy
+    "XOM":     ["exxon", "exxonmobil", "xom"],
+    "CVX":     ["chevron", "cvx"],
+    "OXY":     ["occidental", "oxy"],
+    # EV / clean energy
+    "RIVN":    ["rivian", "rivn"],
+    "LCID":    ["lucid", "lcid"],
+    "NIO":     ["nio"],
+    "F":       ["ford"],
+    "GM":      ["general motors", " gm "],
+}
+
+
 def _attribute_tickers(title: str, description: str | None, tickers: list[str]) -> list[str]:
     """
     Return the subset of *tickers* that appear in the article title or description.
 
-    Case-insensitive substring match.  If none match, fall back to the full
-    list so the article remains visible (over-attribution beats invisibility).
+    Matches both the raw ticker symbol and known company name aliases so that
+    an article mentioning "Apple" correctly maps to AAPL.  If no tickers match,
+    returns an empty list (the article is attributed to GENERAL by the caller)
+    rather than incorrectly assigning every queried ticker.
     """
     haystack = (title + " " + (description or "")).lower()
-    matched = [t for t in tickers if t.lower() in haystack]
-    return matched if matched else list(tickers)
+    matched: list[str] = []
+    for t in tickers:
+        aliases = _TICKER_ALIASES.get(t.upper(), [t.lower()])
+        if any(alias in haystack for alias in aliases):
+            matched.append(t)
+    return matched
 
 
 class NewsApiFeed(DataFeed):

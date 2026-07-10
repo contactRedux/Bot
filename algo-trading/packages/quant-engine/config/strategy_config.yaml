@@ -39,10 +39,12 @@ momentum:
   allocation_weight: 0.20   # 20% of risk budget
 
   # Minimum blended model signal to open a position (range 0–1)
-  entry_threshold: 0.55
+  # Lowered to 0.35 so the technical-indicator fallback (no ML models) can fire.
+  entry_threshold: 0.35
 
   # Minimum model confidence to act on a signal (range 0–1)
-  min_confidence: 0.60
+  # Lowered to 0.42 — technical fallback tops out at ~0.85, average ~0.55.
+  min_confidence: 0.42
 
   # Bars to wait after entering before re-evaluating for a new signal
   cooldown_bars: 4
@@ -57,7 +59,28 @@ momentum:
   take_profit_pct: 0.05
 
   # Universe of tickers this strategy trades (overridden at runtime via CLI)
-  default_tickers: ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "BTC-USD", "ETH-USD"]
+  default_tickers:
+    # Large-cap tech
+    - "AAPL"
+    - "MSFT"
+    - "NVDA"
+    - "TSLA"
+    - "AMZN"
+    - "GOOGL"
+    - "META"
+    - "NFLX"
+    # Semiconductors / hardware
+    - "AMD"
+    - "INTC"
+    - "QCOM"
+    - "MU"
+    - "AVGO"
+    - "TSM"
+    - "AMAT"
+    - "SNDK"
+    # Crypto
+    - "BTC-USD"
+    - "ETH-USD"
 
 
 # ── Strategy: Mean Reversion ──────────────────────────────────────────────────
@@ -82,7 +105,20 @@ mean_reversion:
   # Bollinger Band standard deviation width
   bollinger_std: 2.0
 
-  default_tickers: ["AAPL", "MSFT", "GOOGL", "META", "SPY"]
+  default_tickers:
+    - "AAPL"
+    - "MSFT"
+    - "GOOGL"
+    - "META"
+    - "SPY"
+    - "QQQ"
+    - "VOO"
+    - "NVDA"
+    - "AMD"
+    - "JPM"
+    - "GS"
+    - "XOM"
+    - "CVX"
 
 
 # ── Strategy: Statistical Arbitrage (Pairs Trading) ──────────────────────────
@@ -139,7 +175,14 @@ market_making:
   requote_interval_bars: 1
 
   # Tickers amenable to spread capture (high-volume, tight spreads)
-  default_tickers: ["AAPL", "MSFT", "NVDA", "BTC-USD", "ETH-USD"]
+  default_tickers:
+    - "AAPL"
+    - "MSFT"
+    - "NVDA"
+    - "AMD"
+    - "GOOGL"
+    - "BTC-USD"
+    - "ETH-USD"
 
 
 # ── Strategy: News Sentiment ──────────────────────────────────────────────────
@@ -164,7 +207,17 @@ sentiment:
   # Maximum position hold time (bars) before forced exit
   max_hold_bars: 8
 
-  default_tickers: ["AAPL", "TSLA", "NVDA", "AMZN", "MSFT", "BTC-USD"]
+  default_tickers:
+    - "AAPL"
+    - "TSLA"
+    - "NVDA"
+    - "AMZN"
+    - "MSFT"
+    - "GOOGL"
+    - "META"
+    - "AMD"
+    - "BTC-USD"
+    - "ETH-USD"
 
 
 # ── Strategy: Kelly Volatility Targeting ─────────────────────────────────────
@@ -193,7 +246,17 @@ kelly_vol:
   # Only re-size the position every N bars to control turnover
   rebalance_bars: 5
 
-  default_tickers: ["AAPL", "MSFT", "NVDA", "GOOGL", "TSLA", "SPY"]
+  default_tickers:
+    - "AAPL"
+    - "MSFT"
+    - "NVDA"
+    - "GOOGL"
+    - "TSLA"
+    - "SPY"
+    - "QQQ"
+    - "VOO"
+    - "AMZN"
+    - "META"
 
 
 # ── Strategy: Kalman Filter Trend Following ───────────────────────────────────
@@ -225,7 +288,16 @@ kalman_trend:
 
   position_size_scale: 1.0
 
-  default_tickers: ["AAPL", "MSFT", "NVDA", "AMZN", "TSLA", "BTC-USD", "ETH-USD"]
+  default_tickers:
+    - "AAPL"
+    - "MSFT"
+    - "NVDA"
+    - "AMZN"
+    - "TSLA"
+    - "BTC-USD"
+    - "ETH-USD"
+    - "GOOGL"
+    - "META"
 
 
 # ── Strategy: VWAP Mean Reversion ────────────────────────────────────────────
@@ -257,7 +329,19 @@ vwap_reversion:
   # Warmup bars before generating signals
   min_bars: 25
 
-  default_tickers: ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "SPY"]
+  default_tickers:
+    - "AAPL"
+    - "MSFT"
+    - "NVDA"
+    - "GOOGL"
+    - "AMZN"
+    - "META"
+    - "SPY"
+    - "QQQ"
+    - "VOO"
+    - "TSLA"
+    - "AMD"
+    - "NFLX"
 
 
 # ── Strategy: Macro Factor ────────────────────────────────────────────────────

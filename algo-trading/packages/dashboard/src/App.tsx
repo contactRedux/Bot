@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import NavBar from "@/components/NavBar";
 import AiAnalyst from "@/pages/AiAnalyst";
+import BotAnalysis from "@/pages/BotAnalysis";
 import Overview from "@/pages/Overview";
 import BacktestExplorer from "@/pages/BacktestExplorer";
 import LiveMonitor from "@/pages/LiveMonitor";
@@ -35,7 +36,7 @@ export default function App() {
   useWebSocketFeed();
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-zinc-100">
+    <div className="min-h-screen bg-white text-[#1d1d1f]">
       <NavBar />
       <main className="mx-auto max-w-screen-2xl px-4 py-6">
         <Routes>
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/backtest" element={<BacktestExplorer />} />
           <Route path="/live" element={<LiveMonitor />} />
+          <Route path="/bot" element={<BotAnalysis />} />
           <Route path="/news" element={<NewsFeed />} />
           <Route path="/risk" element={<RiskDashboard />} />
           <Route path="/strategies" element={<Strategies />} />

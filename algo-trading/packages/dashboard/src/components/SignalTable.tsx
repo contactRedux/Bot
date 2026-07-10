@@ -1,29 +1,20 @@
 /**
  * components/SignalTable.tsx
  *
- * Live-updating table of the latest strategy signals.
- * Data is pulled from signalStore (populated by the WebSocket "signal" events)
- * and augmented by an initial REST fetch of the latest signals.
- *
- * Columns: Ticker · Strategy · Direction · Strength · Confidence · Time
- * Color coded: LONG rows tinted emerald, SHORT rows tinted rose.
+ * Live-updating table of the latest strategy signals — Apple light aesthetic.
  */
-import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { fetchSignals } from "@/lib/api";
 import { useSignalStore } from "@/store";
 import type { Signal } from "@/store";
 
-// Progress bar for signal strength (maps [-1, +1] → visual bar)
 function StrengthBar({ value }: { value: number }) {
   const pct = Math.round(Math.abs(value) * 100);
-  const color = value >= 0 ? "bg-emerald-400" : "bg-rose-400";
+  const color = value >= 0 ? "bg-[#30d158]" : "bg-[#ff3b30]";
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-zinc-700">
+      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#f5f5f7]">
         <div className={`h-full ${color} transition-all`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="w-8 text-right font-mono text-xs text-zinc-400">
+      <span className="w-8 text-right font-mono text-xs text-[#6e6e73]">
         {value >= 0 ? "+" : ""}
         {value.toFixed(2)}
       </span>
@@ -31,7 +22,6 @@ function StrengthBar({ value }: { value: number }) {
   );
 }
 
-// Relative time display
 function relTime(isoTs: string): string {
   const diffMs = Date.now() - new Date(isoTs).getTime();
   const secs = Math.floor(diffMs / 1_000);
@@ -42,57 +32,33 @@ function relTime(isoTs: string): string {
 }
 
 interface Props {
-  /** Max rows to render (default 50) */
   limit?: number;
 }
 
 export default function SignalTable({ limit = 50 }: Props) {
   const signals = useSignalStore((s) => s.signals);
-  const addSignal = useSignalStore((s) => s.addSignal);
-
-  // Seed the store from REST on mount
-  const { data } = useQuery({
-    queryKey: ["signals"],
-    queryFn: fetchSignals,
-    refetchInterval: 10_000,
-  });
-
-  useEffect(() => {
-    if (data?.signals) {
-      data.signals.forEach((s) =>
-        addSignal({
-          ticker: s.ticker,
-          strategy_id: s.strategy_id,
-          signal: s.signal,
-          confidence: s.confidence,
-          timestamp: s.timestamp,
-        }),
-      );
-    }
-  }, [data, addSignal]);
-
   const rows: Signal[] = signals.slice(0, limit);
 
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800">
-      <div className="flex items-center justify-between border-b border-zinc-700 px-4 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+    <div className="rounded-xl border border-[#e5e5ea] bg-white">
+      <div className="flex items-center justify-between border-b border-[#e5e5ea] px-4 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-[#6e6e73]">
           Live Signals
         </span>
-        <span className="rounded-full bg-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-400">
+        <span className="rounded-full bg-[#f5f5f7] px-2 py-0.5 font-mono text-xs text-[#6e6e73]">
           {signals.length}
         </span>
       </div>
 
       {rows.length === 0 ? (
-        <p className="py-8 text-center text-sm text-zinc-500">
+        <p className="py-8 text-center text-sm text-[#6e6e73]">
           Waiting for signal events…
         </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs text-zinc-500">
+              <tr className="text-left text-xs text-[#6e6e73]">
                 <th className="px-4 py-2">Ticker</th>
                 <th className="px-4 py-2">Strategy</th>
                 <th className="px-4 py-2">Direction</th>
@@ -107,20 +73,18 @@ export default function SignalTable({ limit = 50 }: Props) {
                 return (
                   <tr
                     key={i}
-                    className={`border-t border-zinc-700/50 transition-colors ${
-                      isLong ? "hover:bg-emerald-900/10" : "hover:bg-rose-900/10"
-                    }`}
+                    className="border-t border-[#e5e5ea] transition-colors hover:bg-[#f5f5f7]"
                   >
-                    <td className="px-4 py-2 font-mono font-semibold text-sky-400">
+                    <td className="px-4 py-2 font-mono font-semibold text-[#007aff]">
                       {s.ticker}
                     </td>
-                    <td className="px-4 py-2 text-zinc-400">{s.strategy_id}</td>
+                    <td className="px-4 py-2 text-[#6e6e73]">{s.strategy_id}</td>
                     <td className="px-4 py-2">
                       <span
-                        className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
                           isLong
-                            ? "bg-emerald-500/15 text-emerald-400"
-                            : "bg-rose-500/15 text-rose-400"
+                            ? "bg-[#30d158]/10 text-[#30d158]"
+                            : "bg-[#ff3b30]/10 text-[#ff3b30]"
                         }`}
                       >
                         {isLong ? "▲ LONG" : "▼ SHORT"}
@@ -129,10 +93,10 @@ export default function SignalTable({ limit = 50 }: Props) {
                     <td className="px-4 py-2">
                       <StrengthBar value={s.signal} />
                     </td>
-                    <td className="px-4 py-2 text-right font-mono text-xs text-zinc-400">
+                    <td className="px-4 py-2 text-right font-mono text-xs text-[#6e6e73]">
                       {(s.confidence * 100).toFixed(0)}%
                     </td>
-                    <td className="px-4 py-2 text-right font-mono text-xs text-zinc-500">
+                    <td className="px-4 py-2 text-right font-mono text-xs text-[#8e8e93]">
                       {relTime(s.timestamp)}
                     </td>
                   </tr>

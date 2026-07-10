@@ -40,13 +40,13 @@ function GaugeBar({ label, value, limit, unit = "%", invertColors = true }: Gaug
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-xs">
-        <span className="text-zinc-400">{label}</span>
-        <span className={`font-mono font-semibold ${danger ? "text-rose-400" : warn ? "text-amber-400" : "text-zinc-200"}`}>
+        <span className="text-[#6e6e73]">{label}</span>
+        <span className={`font-mono font-semibold ${danger ? "text-[#ff3b30]" : warn ? "text-amber-500" : "text-[#1d1d1f]"}`}>
           {value.toFixed(2)}{unit}
-          <span className="ml-1 text-zinc-500">/ {limit.toFixed(2)}{unit}</span>
+          <span className="ml-1 text-[#6e6e73]">/ {limit.toFixed(2)}{unit}</span>
         </span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-700">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-[#f5f5f7]">
         <div
           className={`h-full transition-all ${barColor}`}
           style={{ width: `${pct}%` }}
@@ -63,8 +63,8 @@ function GaugeBar({ label, value, limit, unit = "%", invertColors = true }: Gaug
 function MetricRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between py-1.5 text-sm">
-      <span className="text-zinc-400">{label}</span>
-      <span className="font-mono font-semibold text-zinc-100">{value}</span>
+      <span className="text-[#6e6e73]">{label}</span>
+      <span className="font-mono font-semibold text-[#1d1d1f]">{value}</span>
     </div>
   );
 }
@@ -152,17 +152,17 @@ export default function RiskPanel() {
       )}
 
       {isLoading && !s && (
-        <p className="py-8 text-center text-sm text-zinc-500">Loading risk data…</p>
+        <p className="py-8 text-center text-sm text-[#6e6e73]">Loading risk data…</p>
       )}
 
       {s && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* VaR / CVaR */}
-          <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <div className="rounded-xl border border-[#e5e5ea] bg-white p-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#6e6e73]">
               Value at Risk (Historical Simulation)
             </h3>
-            <div className="divide-y divide-zinc-700/50">
+            <div className="divide-y divide-[#e5e5ea]">
               <MetricRow label="VaR 95%" value={formatUsd(s.var_95)} />
               <MetricRow label="VaR 99%" value={formatUsd(s.var_99)} />
               <MetricRow label="CVaR 95% (Expected Shortfall)" value={formatUsd(s.cvar_95)} />
@@ -172,8 +172,8 @@ export default function RiskPanel() {
           </div>
 
           {/* Drawdown gauges */}
-          <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <div className="rounded-xl border border-[#e5e5ea] bg-white p-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#6e6e73]">
               Drawdown &amp; Daily Loss
             </h3>
             <div className="space-y-4">
@@ -192,14 +192,14 @@ export default function RiskPanel() {
 
           {/* Correlation pairs */}
           {s.correlation_pairs.length > 0 && (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4 lg:col-span-2">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            <div className="rounded-xl border border-[#e5e5ea] bg-white p-4 lg:col-span-2">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#6e6e73]">
                 High-Correlation Pairs
               </h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-xs text-zinc-500">
+                    <tr className="text-left text-xs text-[#6e6e73]">
                       <th className="py-1.5 pr-4">Asset A</th>
                       <th className="py-1.5 pr-4">Asset B</th>
                       <th className="py-1.5 text-right">Correlation</th>
@@ -207,12 +207,12 @@ export default function RiskPanel() {
                   </thead>
                   <tbody>
                     {s.correlation_pairs.map((p, i) => (
-                      <tr key={i} className="border-t border-zinc-700/50">
-                        <td className="py-1.5 pr-4 font-mono text-sky-400">{p.asset_a}</td>
-                        <td className="py-1.5 pr-4 font-mono text-sky-400">{p.asset_b}</td>
+                      <tr key={i} className="border-t border-[#e5e5ea]">
+                        <td className="py-1.5 pr-4 font-mono text-[#007aff]">{p.asset_a}</td>
+                        <td className="py-1.5 pr-4 font-mono text-[#007aff]">{p.asset_b}</td>
                         <td
                           className={`py-1.5 text-right font-mono font-semibold ${
-                            Math.abs(p.correlation) > 0.8 ? "text-rose-400" : "text-amber-400"
+                            Math.abs(p.correlation) > 0.8 ? "text-[#ff3b30]" : "text-amber-500"
                           }`}
                         >
                           {p.correlation.toFixed(3)}

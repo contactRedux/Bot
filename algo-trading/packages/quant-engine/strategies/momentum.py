@@ -128,23 +128,22 @@ class MomentumStrategy(BaseStrategy):
             state.cooldown_bars_remaining -= 1
             return
 
-        # ── Step 3: Require at least one model ───────────────────────────────
+        # ── Step 3: Compute signal (ML models or technical fallback) ──────────
+        adx: float | None = self._get_feature(features, "adx")
         if self._lstm is None and self._transformer is None:
-            return
+            # No ML models loaded — fall back to pure technical indicator signals
+            signal, confidence = self._technical_signal(features, bar)
+        else:
+            # ADX trend filter: skip in choppy markets
+            if adx is not None and adx < 20.0:
+                logger.debug("Momentum [%s] skipping: ADX=%.1f < 20 (no trend)", ticker, adx)
+                return
+            signal, confidence = self._compute_signal(features)
 
-        # ── Step 4: ADX trend filter ──────────────────────────────────────────
-        adx = self._get_feature(features, "adx")
-        if adx is not None and adx < 20.0:
-            # Choppy market — momentum strategies perform poorly without trend
-            logger.debug("Momentum [%s] skipping: ADX=%.1f < 20 (no trend)", ticker, adx)
-            return
-
-        # ── Step 5: Compute signal ────────────────────────────────────────────
-        signal, confidence = self._compute_signal(features)
         state.last_signal = signal
         state.last_confidence = confidence
 
-        # ── Step 6: Entry check ───────────────────────────────────────────────
+        # ── Step 4: Entry check ───────────────────────────────────────────────
         if abs(signal) < self.entry_threshold or confidence < self.min_confidence:
             return
 
@@ -240,6 +239,70 @@ class MomentumStrategy(BaseStrategy):
             logger.info("Momentum [%s] exit: %s pnl_pct=%.3f%%", ticker, reason, pnl_pct * 100)
 
         return orders
+
+    def _technical_signal(self, features: pd.DataFrame, bar: pd.Series) -> tuple[float, float]:
+        """
+        Pure technical-indicator signal used when no ML models are loaded.
+
+        Combines: EMA crossover, RSI momentum, MACD histogram, and ADX trend
+        filter into a blended directional signal in [-1, +1].
+
+        Returns (signal, confidence).
+        """
+        if features.empty:
+            return 0.0, 0.0
+
+        def _feat(col: str) -> float | None:
+            return self._get_feature(features, col)
+
+        scores: list[float] = []
+
+        # EMA crossover (fast > slow = bullish)
+        ema9  = _feat("ema_9")  or _feat("ema9")
+        ema21 = _feat("ema_21") or _feat("ema21")
+        if ema9 is not None and ema21 is not None and ema21 != 0:
+            scores.append(1.0 if ema9 > ema21 else -1.0)
+
+        # RSI momentum: below 40 = bullish, above 60 = bearish
+        rsi = _feat("rsi") or _feat("rsi_14")
+        if rsi is not None:
+            if rsi < 35:
+                scores.append(0.8)
+            elif rsi < 45:
+                scores.append(0.3)
+            elif rsi > 65:
+                scores.append(-0.8)
+            elif rsi > 55:
+                scores.append(-0.3)
+            else:
+                scores.append(0.0)
+
+        # MACD histogram sign
+        macd_line = _feat("macd") or _feat("macd_line")
+        macd_sig  = _feat("macd_signal") or _feat("macd_sig")
+        if macd_line is not None and macd_sig is not None:
+            scores.append(0.6 if macd_line > macd_sig else -0.6)
+
+        # SMA trend: price above 50-SMA and 50 > 200 = strong uptrend
+        sma50  = _feat("sma_50")  or _feat("sma50")
+        sma200 = _feat("sma_200") or _feat("sma200")
+        close  = float(bar.get("close", 0.0))
+        if sma50 is not None and sma200 is not None and close > 0:
+            if close > sma50 and sma50 > sma200:
+                scores.append(1.0)
+            elif close < sma50 and sma50 < sma200:
+                scores.append(-1.0)
+            else:
+                scores.append(0.0)
+
+        if not scores:
+            return 0.0, 0.0
+
+        signal = float(np.mean(scores))
+        # Confidence scales with agreement among indicators
+        agreement = sum(1 for s in scores if (s > 0) == (signal > 0)) / len(scores)
+        confidence = 0.40 + agreement * 0.45   # range [0.40, 0.85]
+        return round(signal, 4), round(confidence, 4)
 
     @staticmethod
     def _get_feature(features: pd.DataFrame, col: str) -> float | None:

@@ -33,7 +33,7 @@ export default function Overview() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-zinc-100">Portfolio Overview</h1>
+        <h1 className="text-xl font-semibold text-[#1d1d1f]">Portfolio Overview</h1>
       </div>
 
       {/* Portfolio summary */}
@@ -43,7 +43,7 @@ export default function Overview() {
       {primaryTicker ? (
         <PriceChart ticker={primaryTicker} data={chartPoints} />
       ) : (
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-8 text-center text-sm text-zinc-500">
+        <div className="rounded-xl border border-[#e5e5ea] bg-white px-4 py-8 text-center text-sm text-[#6e6e73]">
           No open positions — price chart will appear once positions are taken.
         </div>
       )}

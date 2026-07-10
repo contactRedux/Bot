@@ -143,9 +143,6 @@ class Portfolio:
         # Total commission paid
         self.total_commission: float = 0.0
 
-        # Record initial equity
-        self.equity_curve.append((datetime.now(timezone.utc), self.initial_capital))
-
     # ── Core event handler ─────────────────────────────────────────────────
 
     def on_fill(self, fill: FillEvent) -> None:
@@ -354,4 +351,3 @@ class Portfolio:
         self.trade_log.clear()
         self._mark_prices.clear()
         self.total_commission = 0.0
-        self.equity_curve.append((datetime.now(timezone.utc), self.initial_capital))

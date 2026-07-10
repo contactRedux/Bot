@@ -1,9 +1,6 @@
 /**
  * pages/PortfolioMetrics.tsx — Live session performance metrics dashboard.
- *
- * Calls GET /api/portfolio/metrics which runs compute_metrics() on the live
- * portfolio equity curve and trade log, returning Sharpe, max drawdown,
- * win rate, CAGR, and more.
+ * Apple light aesthetic.
  */
 import { useQuery } from "@tanstack/react-query";
 import { fetchPortfolioMetrics } from "@/lib/api";
@@ -27,8 +24,8 @@ function pctFmt(v: number | null | undefined): string {
 }
 
 function colorPct(v: number | null | undefined) {
-  if (v == null) return "text-zinc-400";
-  return v >= 0 ? "text-emerald-400" : "text-rose-400";
+  if (v == null) return "text-[#6e6e73]";
+  return v >= 0 ? "text-[#30d158]" : "text-[#ff3b30]";
 }
 
 function MetricCard({
@@ -43,10 +40,10 @@ function MetricCard({
   valueClass?: string;
 }) {
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
-      <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">{label}</div>
-      <div className={`mt-1.5 text-2xl font-bold ${valueClass ?? "text-zinc-100"}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-zinc-500">{sub}</div>}
+    <div className="rounded-xl border border-[#e5e5ea] bg-white p-4">
+      <div className="text-xs font-medium uppercase tracking-wider text-[#6e6e73]">{label}</div>
+      <div className={`mt-1.5 text-2xl font-bold ${valueClass ?? "text-[#1d1d1f]"}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-[#6e6e73]">{sub}</div>}
     </div>
   );
 }
@@ -59,14 +56,14 @@ function AttributionBar({ sid, pnl, total }: { sid: string; pnl: number; total: 
   return (
     <div>
       <div className="flex justify-between text-xs">
-        <span className="text-zinc-400">{sid}</span>
-        <span className={pnl >= 0 ? "text-emerald-400" : "text-rose-400"}>
+        <span className="text-[#6e6e73]">{sid}</span>
+        <span className={pnl >= 0 ? "text-[#30d158]" : "text-[#ff3b30]"}>
           {pnl >= 0 ? "+" : ""}${fmt(pnl)} ({fmt(pct, 1)}%)
         </span>
       </div>
-      <div className="mt-1 h-1.5 rounded bg-zinc-700">
+      <div className="mt-1 h-1.5 rounded-full bg-[#f5f5f7]">
         <div
-          className={`h-1.5 rounded ${pnl >= 0 ? "bg-emerald-500" : "bg-rose-500"}`}
+          className={`h-1.5 rounded-full ${pnl >= 0 ? "bg-[#30d158]" : "bg-[#ff3b30]"}`}
           style={{ width: `${Math.min(pct, 100)}%` }}
         />
       </div>
@@ -92,15 +89,15 @@ export default function PortfolioMetrics() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">Portfolio Metrics</h1>
-          <p className="text-sm text-zinc-500">
+          <h1 className="text-xl font-semibold text-[#1d1d1f]">Portfolio Metrics</h1>
+          <p className="text-sm text-[#6e6e73]">
             Performance statistics for the current live session.
           </p>
         </div>
         <button
           onClick={() => refetch()}
           disabled={isFetching}
-          className="rounded border border-zinc-600 px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-100 disabled:opacity-50"
+          className="rounded-lg border border-[#e5e5ea] px-3 py-1.5 text-xs text-[#6e6e73] hover:border-[#007aff] hover:text-[#007aff] disabled:opacity-50"
         >
           {isFetching ? "Refreshing…" : "Refresh"}
         </button>
@@ -108,7 +105,7 @@ export default function PortfolioMetrics() {
 
       {/* Error */}
       {(error || (data && "error" in (data as object))) && (
-        <div className="rounded border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+        <div className="rounded-xl border border-[#ff3b30]/20 bg-[#ff3b30]/5 px-4 py-3 text-sm text-[#ff3b30]">
           {(error as Error | null)?.message ?? String((data as unknown as { error: string }).error)}
         </div>
       )}
@@ -117,7 +114,7 @@ export default function PortfolioMetrics() {
       {isFetching && !data && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-lg bg-zinc-800" />
+            <div key={i} className="h-24 animate-pulse rounded-xl bg-[#f5f5f7]" />
           ))}
         </div>
       )}
@@ -157,19 +154,19 @@ export default function PortfolioMetrics() {
               label="Sharpe Ratio"
               value={fmt(data.sharpe_ratio, 3)}
               sub="Annualised (rf=5%)"
-              valueClass={data.sharpe_ratio >= 1 ? "text-emerald-400" : data.sharpe_ratio >= 0 ? "text-zinc-200" : "text-rose-400"}
+              valueClass={data.sharpe_ratio >= 1 ? "text-[#30d158]" : data.sharpe_ratio >= 0 ? "text-[#1d1d1f]" : "text-[#ff3b30]"}
             />
             <MetricCard
               label="Sortino Ratio"
               value={fmt(data.sortino_ratio, 3)}
               sub="Downside deviation"
-              valueClass={data.sortino_ratio >= 1 ? "text-emerald-400" : data.sortino_ratio >= 0 ? "text-zinc-200" : "text-rose-400"}
+              valueClass={data.sortino_ratio >= 1 ? "text-[#30d158]" : data.sortino_ratio >= 0 ? "text-[#1d1d1f]" : "text-[#ff3b30]"}
             />
             <MetricCard
               label="Max Drawdown"
               value={pctFmt(-Math.abs(data.max_drawdown_pct))}
               sub="Peak-to-trough"
-              valueClass="text-rose-400"
+              valueClass="text-[#ff3b30]"
             />
             <MetricCard
               label="Calmar Ratio"
@@ -184,13 +181,13 @@ export default function PortfolioMetrics() {
               label="Win Rate"
               value={pctFmt(data.win_rate_pct)}
               sub={`${data.n_wins}W / ${data.n_losses}L`}
-              valueClass={data.win_rate_pct >= 50 ? "text-emerald-400" : "text-rose-400"}
+              valueClass={data.win_rate_pct >= 50 ? "text-[#30d158]" : "text-[#ff3b30]"}
             />
             <MetricCard
               label="Profit Factor"
               value={fmt(data.profit_factor, 3)}
               sub="Gross wins / gross losses"
-              valueClass={data.profit_factor >= 1.5 ? "text-emerald-400" : data.profit_factor >= 1 ? "text-zinc-200" : "text-rose-400"}
+              valueClass={data.profit_factor >= 1.5 ? "text-[#30d158]" : data.profit_factor >= 1 ? "text-[#1d1d1f]" : "text-[#ff3b30]"}
             />
             <MetricCard
               label="Total Trades"
@@ -206,8 +203,8 @@ export default function PortfolioMetrics() {
 
           {/* Strategy attribution */}
           {data.strategy_attribution && Object.keys(data.strategy_attribution).length > 0 && (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-5">
-              <h2 className="mb-4 text-sm font-medium text-zinc-300">Strategy Attribution</h2>
+            <div className="rounded-xl border border-[#e5e5ea] bg-white p-5">
+              <h2 className="mb-4 text-sm font-medium text-[#1d1d1f]">Strategy Attribution</h2>
               <div className="space-y-3">
                 {Object.entries(data.strategy_attribution)
                   .sort(([, a], [, b]) => b - a)
@@ -223,9 +220,8 @@ export default function PortfolioMetrics() {
             </div>
           )}
 
-          {/* Note if no trades yet */}
           {data.n_trades === 0 && (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 py-10 text-center text-sm text-zinc-500">
+            <div className="rounded-xl border border-[#e5e5ea] bg-[#f5f5f7] py-10 text-center text-sm text-[#6e6e73]">
               No trades recorded in this session yet — metrics will populate as fills arrive.
             </div>
           )}

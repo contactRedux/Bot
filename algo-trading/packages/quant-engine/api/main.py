@@ -53,6 +53,7 @@ from api.deps import AppState
 from api.routes.ai_analyst import router as ai_analyst_router
 from api.routes.analysis import router as analysis_router
 from api.routes.backtest import router as backtest_router
+from api.routes.bot_analysis import router as bot_analysis_router
 from api.routes.news import router as news_router
 from api.routes.optimize import router as optimize_router
 from api.routes.portfolio import router as portfolio_router
@@ -370,8 +371,10 @@ app.add_middleware(
 )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
+app.include_router(ai_analyst_router)
 app.include_router(analysis_router)
 app.include_router(backtest_router)
+app.include_router(bot_analysis_router)
 app.include_router(news_router)
 app.include_router(optimize_router)
 app.include_router(portfolio_router)

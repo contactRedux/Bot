@@ -140,7 +140,7 @@ async def get_trades(
 async def get_price_history(
     ticker: str = Query(..., description="Ticker symbol, e.g. AAPL or BTC-USD"),
     interval: str = Query("1d", description="Bar interval: 1d, 1h, 15m, etc."),
-    limit: int = Query(365, ge=1, le=2000, description="Maximum number of bars to return"),
+    limit: int = Query(365, ge=1, le=10000, description="Maximum number of bars to return"),
     state: AppState = Depends(get_app_state),
 ) -> PriceHistoryResponse:
     """

@@ -1,20 +1,9 @@
 /**
- * pages/WatchlistPage.tsx — Persistent watchlist with price alerts.
- *
- * Features:
- *  - Add / remove tickers
- *  - Live price + 1-day change pulled from GET /api/portfolio/price-history
- *  - Per-ticker price alerts: above/below threshold stored in localStorage
- *  - Visual alert indicator when threshold is breached
- *  - All state (tickers + alerts) persisted in localStorage
+ * pages/WatchlistPage.tsx — Persistent watchlist with price alerts — Apple light aesthetic.
  */
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchPriceHistory } from "@/lib/api";
-
-// ---------------------------------------------------------------------------
-// Types & storage keys
-// ---------------------------------------------------------------------------
 
 const WATCHLIST_KEY = "watchlist_tickers";
 const ALERTS_KEY    = "watchlist_alerts";
@@ -84,7 +73,6 @@ function TickerRow({
   const prev  = pts.length >= 2 ? pts[pts.length - 2]?.close : null;
   const chg1d = last != null && prev != null ? ((last - prev) / prev) * 100 : null;
 
-  // Check if alert is triggered
   const triggered = alert && last != null && (
     (alert.direction === "above" && last >= alert.threshold) ||
     (alert.direction === "below" && last <= alert.threshold)
@@ -101,40 +89,42 @@ function TickerRow({
   }
 
   return (
-    <div className={`rounded-lg border p-4 transition-colors ${
-      triggered ? "border-amber-500/50 bg-amber-500/5" : "border-zinc-700 bg-zinc-800"
+    <div className={`rounded-xl border p-4 transition-colors ${
+      triggered ? "border-amber-400/40 bg-amber-50" : "border-[#e5e5ea] bg-white"
     }`}>
       <div className="flex items-start justify-between gap-3">
         {/* Ticker + price */}
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-base font-bold text-zinc-100">{ticker}</span>
+            <span className="font-mono text-base font-bold text-[#1d1d1f]">{ticker}</span>
             {triggered && (
-              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs font-medium text-amber-400">
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-600">
                 ALERT
               </span>
             )}
           </div>
           <div className="mt-1 flex items-baseline gap-3">
-            <span className="text-xl font-semibold text-zinc-200">
+            <span className="text-xl font-semibold text-[#1d1d1f]">
               {last != null ? `$${last.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
             </span>
             {chg1d != null && (
-              <span className={`text-sm ${chg1d >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+              <span
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-sm font-medium ${
+                  chg1d >= 0
+                    ? "bg-[#30d158]/10 text-[#30d158]"
+                    : "bg-[#ff3b30]/10 text-[#ff3b30]"
+                }`}
+              >
                 {chg1d >= 0 ? "+" : ""}{chg1d.toFixed(2)}%
               </span>
             )}
           </div>
-          {/* Alert info */}
           {alert && (
-            <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-500">
-              <span className={triggered ? "text-amber-400" : "text-zinc-500"}>
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-[#6e6e73]">
+              <span className={triggered ? "text-amber-500" : "text-[#6e6e73]"}>
                 Alert: {alert.direction} ${alert.threshold.toLocaleString()}
               </span>
-              <button
-                onClick={onClearAlert}
-                className="text-zinc-600 hover:text-zinc-400"
-              >
+              <button onClick={onClearAlert} className="text-[#8e8e93] hover:text-[#ff3b30]">
                 ×
               </button>
             </div>
@@ -145,13 +135,13 @@ function TickerRow({
         <div className="flex shrink-0 gap-2">
           <button
             onClick={() => setShowAlertForm(!showAlertForm)}
-            className="rounded border border-zinc-600 px-2.5 py-1 text-xs text-zinc-400 hover:border-sky-600 hover:text-sky-400"
+            className="rounded-lg border border-[#e5e5ea] px-2.5 py-1 text-xs text-[#6e6e73] hover:border-[#007aff] hover:text-[#007aff]"
           >
             {alert ? "Edit Alert" : "+ Alert"}
           </button>
           <button
             onClick={onRemove}
-            className="rounded border border-zinc-700 px-2.5 py-1 text-xs text-zinc-500 hover:border-rose-500/50 hover:text-rose-400"
+            className="rounded-lg border border-[#e5e5ea] px-2.5 py-1 text-xs text-[#8e8e93] hover:border-[#ff3b30]/40 hover:text-[#ff3b30]"
           >
             ×
           </button>
@@ -164,7 +154,7 @@ function TickerRow({
           <select
             value={alertDir}
             onChange={(e) => setAlertDir(e.target.value as "above" | "below")}
-            className="rounded border border-zinc-600 bg-zinc-700 px-2 py-1 text-xs text-zinc-200"
+            className="rounded-lg border border-[#e5e5ea] bg-[#f5f5f7] px-2 py-1 text-xs text-[#1d1d1f]"
           >
             <option value="above">Above</option>
             <option value="below">Below</option>
@@ -176,18 +166,18 @@ function TickerRow({
             value={alertVal}
             onChange={(e) => setAlertVal(e.target.value)}
             placeholder="Price threshold"
-            className="flex-1 rounded border border-zinc-600 bg-zinc-700 px-2 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:border-sky-500 focus:outline-none"
+            className="flex-1 rounded-lg border border-[#e5e5ea] bg-[#f5f5f7] px-2 py-1 text-xs text-[#1d1d1f] placeholder-[#8e8e93] focus:border-[#007aff] focus:outline-none"
           />
           <button
             type="submit"
-            className="rounded bg-sky-700 px-3 py-1 text-xs text-white hover:bg-sky-600"
+            className="rounded-lg bg-[#007aff] px-3 py-1 text-xs text-white hover:bg-[#007aff]/90"
           >
             Set
           </button>
           <button
             type="button"
             onClick={() => setShowAlertForm(false)}
-            className="rounded border border-zinc-600 px-2 py-1 text-xs text-zinc-400"
+            className="rounded-lg border border-[#e5e5ea] px-2 py-1 text-xs text-[#6e6e73]"
           >
             Cancel
           </button>
@@ -205,7 +195,6 @@ export default function WatchlistPage() {
   const [alerts, setAlerts]   = useState<Record<string, Alert>>(loadAlerts);
   const [input, setInput]     = useState("");
 
-  // Persist on change
   useEffect(() => { saveTickers(tickers); }, [tickers]);
   useEffect(() => { saveAlerts(alerts); }, [alerts]);
 
@@ -246,13 +235,13 @@ export default function WatchlistPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">Watchlist</h1>
-          <p className="text-sm text-zinc-500">
+          <h1 className="text-xl font-semibold text-[#1d1d1f]">Watchlist</h1>
+          <p className="text-sm text-[#6e6e73]">
             Track prices and set alerts for any ticker. State is saved in your browser.
           </p>
         </div>
         {triggeredCount > 0 && (
-          <span className="rounded bg-amber-500/20 px-2.5 py-1 text-sm font-medium text-amber-400">
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-600">
             {triggeredCount} alert{triggeredCount > 1 ? "s" : ""} triggered
           </span>
         )}
@@ -265,11 +254,11 @@ export default function WatchlistPage() {
           value={input}
           onChange={(e) => setInput(e.target.value.toUpperCase())}
           placeholder="Add ticker — e.g. MU, SNDK, AMD"
-          className="flex-1 rounded border border-zinc-600 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-sky-500 focus:outline-none"
+          className="flex-1 rounded-xl border border-[#e5e5ea] bg-[#f5f5f7] px-4 py-2.5 text-sm text-[#1d1d1f] placeholder-[#8e8e93] focus:border-[#007aff] focus:outline-none"
         />
         <button
           type="submit"
-          className="rounded bg-sky-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-sky-500"
+          className="rounded-xl bg-[#007aff] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#007aff]/90"
         >
           Add
         </button>
@@ -277,7 +266,7 @@ export default function WatchlistPage() {
 
       {/* Tickers */}
       {tickers.length === 0 ? (
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 py-20 text-center text-sm text-zinc-500">
+        <div className="rounded-xl border border-[#e5e5ea] bg-[#f5f5f7] py-20 text-center text-sm text-[#6e6e73]">
           No tickers in your watchlist. Add one above.
         </div>
       ) : (

@@ -265,17 +265,11 @@ class GdeltFeed(DataFeed):
                         sentiment = None
 
                 # Associate only the tickers that appear in the article title
-                # (case-insensitive substring check).  Assigning all queried
-                # tickers to every article (the old behaviour) caused every GDELT
-                # article to show as "AAPL" in the dashboard even when it was
-                # about Amazon.  This is still approximate but far more accurate.
+                # using the same alias-aware attribution as newsapi_feed.
                 if tickers:
-                    title_lower = title.lower()
-                    article_tickers = [t for t in tickers if t.lower() in title_lower]
-                    # Fallback: if none matched, keep the full list so the article
-                    # is still visible (better over-attribution than invisibility)
-                    if not article_tickers:
-                        article_tickers = list(tickers)
+                    from data.feeds.newsapi_feed import _attribute_tickers
+                    article_tickers = _attribute_tickers(title, None, list(tickers))
+                    # No match → leave empty; caller maps [] → "GENERAL"
                 else:
                     article_tickers = []
 

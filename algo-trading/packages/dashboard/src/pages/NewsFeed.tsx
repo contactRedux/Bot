@@ -1,11 +1,5 @@
 /**
- * pages/NewsFeed.tsx — News Sentiment Feed page.
- *
- * Usage:
- *   - Type any ticker in the search box and press "Fetch" (or Enter).
- *   - The page calls POST /api/news/fetch which pulls live from NewsAPI+GDELT.
- *   - Results are shown in a list.  If nothing comes back: "No articles found."
- *   - Existing articles from the store (previously fetched) are shown below.
+ * pages/NewsFeed.tsx — News Sentiment Feed page — Apple light aesthetic.
  */
 import { useState, useRef } from "react";
 import NewsFeedComponent from "@/components/NewsFeed";
@@ -14,6 +8,8 @@ import { useNewsStore } from "@/store";
 import type { NewsArticleDTO } from "@/lib/api";
 
 type FetchState = "idle" | "loading" | "done" | "error";
+
+const FETCH_TIMEOUT_MS = 30_000;
 
 export default function NewsFeed() {
   const [input, setInput]               = useState("");
@@ -34,18 +30,28 @@ export default function NewsFeed() {
     setLastTicker(ticker);
     setFetchResults([]);
     setFetchMsg("");
+
+    const timeoutId = window.setTimeout(() => {
+      setFetchState("error");
+      setFetchMsg("Request timed out — news sources may be slow or unavailable. Try again shortly.");
+    }, FETCH_TIMEOUT_MS);
+
     try {
       const res = await fetchNewsForTicker(ticker, 20);
+      window.clearTimeout(timeoutId);
       if (res.articles.length > 0) {
         setFetchResults(res.articles);
-        // Also push into global store so the list below updates
         res.articles.forEach((a) => addArticle(a as Parameters<typeof addArticle>[0]));
         setFetchMsg(`${res.articles.length} article${res.articles.length !== 1 ? "s" : ""} found (${res.inserted} new saved).`);
       } else {
-        setFetchMsg("No articles found for this ticker.");
+        setFetchMsg(
+          "No articles found for this ticker from our current sources (NewsAPI + GDELT). " +
+          "Adding a NewsAPI key in .env or the Bloomberg plan will expand coverage."
+        );
       }
       setFetchState("done");
     } catch {
+      window.clearTimeout(timeoutId);
       setFetchMsg("Fetch failed — check if the API server is running.");
       setFetchState("error");
     }
@@ -64,18 +70,18 @@ export default function NewsFeed() {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-zinc-100">News Sentiment Feed</h1>
+        <h1 className="text-xl font-semibold text-[#1d1d1f]">News Sentiment Feed</h1>
         <button
           onClick={handleLoadAll}
-          className="rounded border border-zinc-600 px-3 py-1 text-xs text-zinc-400 hover:border-zinc-400 hover:text-zinc-100"
+          className="rounded-lg border border-[#e5e5ea] px-3 py-1 text-xs text-[#6e6e73] hover:border-[#007aff] hover:text-[#007aff]"
         >
           Refresh all
         </button>
       </div>
 
       {/* Ticker search / fetch */}
-      <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4 space-y-3">
-        <p className="text-xs text-zinc-500">
+      <div className="rounded-xl border border-[#e5e5ea] bg-white p-4 space-y-3">
+        <p className="text-xs text-[#6e6e73]">
           Pull live articles for any ticker from NewsAPI + GDELT:
         </p>
         <div className="flex gap-2">
@@ -85,12 +91,12 @@ export default function NewsFeed() {
             onChange={(e) => setInput(e.target.value.toUpperCase())}
             onKeyDown={(e) => e.key === "Enter" && handleFetch()}
             placeholder="e.g. AMD, NVDA, BTC-USD…"
-            className="flex-1 rounded border border-zinc-600 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-100 placeholder-zinc-600 focus:border-sky-400 focus:outline-none"
+            className="flex-1 rounded-xl border border-[#e5e5ea] bg-[#f5f5f7] px-3 py-2 font-mono text-sm text-[#1d1d1f] placeholder-[#8e8e93] focus:border-[#007aff] focus:outline-none"
           />
           <button
             onClick={handleFetch}
             disabled={fetchState === "loading" || !input.trim()}
-            className="rounded border border-sky-500/50 bg-sky-500/15 px-4 py-2 text-xs font-semibold text-sky-400 hover:bg-sky-500/25 disabled:opacity-40"
+            className="rounded-xl border border-[#007aff]/30 bg-[#007aff]/10 px-4 py-2 text-xs font-semibold text-[#007aff] hover:bg-[#007aff]/20 disabled:opacity-40"
           >
             {fetchState === "loading" ? "Fetching…" : "Fetch"}
           </button>
@@ -98,15 +104,15 @@ export default function NewsFeed() {
 
         {/* Fetch result message */}
         {fetchMsg && (
-          <p className={`text-xs ${fetchState === "error" ? "text-rose-400" : fetchResults.length === 0 ? "text-zinc-500" : "text-emerald-400"}`}>
-            {lastTicker && <span className="font-mono mr-1 text-sky-400">{lastTicker}</span>}
+          <p className={`text-xs ${fetchState === "error" ? "text-[#ff3b30]" : fetchResults.length === 0 ? "text-[#6e6e73]" : "text-[#30d158]"}`}>
+            {lastTicker && <span className="font-mono mr-1 text-[#007aff]">{lastTicker}</span>}
             {fetchMsg}
           </p>
         )}
 
         {/* Results list from this fetch */}
         {fetchResults.length > 0 && (
-          <ul className="divide-y divide-zinc-700/50 border-t border-zinc-700 pt-2 max-h-72 overflow-y-auto">
+          <ul className="divide-y divide-[#e5e5ea] border-t border-[#e5e5ea] pt-2 max-h-72 overflow-y-auto">
             {fetchResults.map((a) => (
               <li key={a.id} className="py-2">
                 <div className="flex items-start justify-between gap-2">
@@ -116,26 +122,26 @@ export default function NewsFeed() {
                         href={a.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm leading-snug text-zinc-100 hover:text-sky-400"
+                        className="text-sm leading-snug text-[#1d1d1f] hover:text-[#007aff]"
                       >
                         {a.headline}
                       </a>
                     ) : (
-                      <p className="text-sm leading-snug text-zinc-100">{a.headline}</p>
+                      <p className="text-sm leading-snug text-[#1d1d1f]">{a.headline}</p>
                     )}
-                    <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-zinc-500">
-                      <span className="font-mono text-sky-400">{a.ticker}</span>
+                    <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-[#6e6e73]">
+                      <span className="font-mono text-[#007aff]">{a.ticker}</span>
                       <span>{a.source}</span>
                       <span>{new Date(a.published_at).toLocaleString()}</span>
                     </div>
                   </div>
                   <span
-                    className={`shrink-0 rounded border px-2 py-0.5 text-xs font-medium ${
+                    className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${
                       a.sentiment_label === "positive"
-                        ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                        ? "bg-[#30d158]/10 text-[#30d158] border-[#30d158]/25"
                         : a.sentiment_label === "negative"
-                        ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
-                        : "bg-zinc-700 text-zinc-400 border-zinc-600"
+                        ? "bg-[#ff3b30]/10 text-[#ff3b30] border-[#ff3b30]/25"
+                        : "bg-[#f5f5f7] text-[#6e6e73] border-[#e5e5ea]"
                     }`}
                   >
                     {a.sentiment_label.charAt(0).toUpperCase() + a.sentiment_label.slice(1)}
@@ -150,7 +156,7 @@ export default function NewsFeed() {
 
       {/* All stored articles */}
       <div>
-        <p className="mb-2 text-xs text-zinc-500">
+        <p className="mb-2 text-xs text-[#6e6e73]">
           All stored articles ({articles.length}):
         </p>
         <NewsFeedComponent limit={200} />

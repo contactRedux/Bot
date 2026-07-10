@@ -30,11 +30,69 @@ from api.deps import AppState, get_app_state
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/news", tags=["news"])
 
+# ---------------------------------------------------------------------------
+# Lightweight keyword-based sentiment fallback
+# Used when FinBERT has not yet scored an article (sentiment_score is None).
+# ---------------------------------------------------------------------------
+_POSITIVE_WORDS = frozenset([
+    "beat", "beats", "surge", "surges", "surged", "rally", "rallies", "rallied",
+    "rise", "rises", "rose", "gain", "gains", "gained", "record", "upgrade",
+    "upgrades", "upgraded", "profit", "profits", "growth", "strong", "buy",
+    "bullish", "outperform", "exceed", "exceeds", "exceeded", "boost", "boosts",
+    "boosted", "positive", "optimistic", "opportunity", "opportunities",
+    "higher", "up", "climb", "climbs", "climbed", "advance", "advances",
+    "advanced", "win", "wins", "won", "success", "successful",
+])
+
+_NEGATIVE_WORDS = frozenset([
+    "miss", "misses", "missed", "fall", "falls", "fell", "drop", "drops",
+    "dropped", "decline", "declines", "declined", "loss", "losses", "lose",
+    "loses", "lost", "cut", "cuts", "downgrade", "downgrades", "downgraded",
+    "sell", "bearish", "underperform", "weak", "weaker", "concern", "concerns",
+    "risk", "risks", "crash", "crashes", "crashed", "plunge", "plunges",
+    "plunged", "warning", "warn", "warns", "warned", "negative", "lower",
+    "down", "slump", "slumps", "slumped", "lawsuit", "investigation",
+    "bankrupt", "bankruptcy", "fraud", "recall", "layoff", "layoffs",
+])
+
+
+def _keyword_score(text: str) -> float:
+    """
+    Return a rough sentiment score in [-1, +1] based on financial keyword counts.
+
+    Used as a fallback when FinBERT has not scored the article.  Not as accurate
+    as FinBERT but far better than always returning 0.
+    """
+    if not text:
+        return 0.0
+    words = text.lower().split()
+    pos = sum(1 for w in words if w.rstrip(".,!?;:") in _POSITIVE_WORDS)
+    neg = sum(1 for w in words if w.rstrip(".,!?;:") in _NEGATIVE_WORDS)
+    total = pos + neg
+    if total == 0:
+        return 0.0
+    return round((pos - neg) / total, 4)
+
+
+def _resolve_score(article) -> float:
+    """
+    Return the best available sentiment score for an article.
+
+    Priority:
+      1. FinBERT score already stored on the article (most accurate).
+      2. Keyword heuristic applied to the article title (fast fallback).
+    """
+    stored = getattr(article, "sentiment_score", None)
+    if stored is not None:
+        return float(stored)
+    title = getattr(article, "title", "") or ""
+    return _keyword_score(title)
+
 
 def _format_articles(articles) -> list[dict]:
     result = []
     for a in articles:
-        score = a.sentiment_score or 0.0
+        score = _resolve_score(a)
         if score > 0.1:
             label = "positive"
         elif score < -0.1:

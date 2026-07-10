@@ -263,6 +263,54 @@ export const fetchPortfolioMetrics = (): Promise<PortfolioMetricsResponse> =>
   request<PortfolioMetricsResponse>("/api/portfolio/metrics");
 
 // ---------------------------------------------------------------------------
+// Bot Analysis
+// ---------------------------------------------------------------------------
+
+export interface BotTickerItem {
+  ticker: string;
+  price: number;
+  pct_change_1d: number;
+  pct_change_1m: number;
+  technical_rating: "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell";
+  technical_score: number;
+  confidence_pct: number;
+  position_status: "flat" | "long" | "short";
+  position_qty: number;
+  last_signal: {
+    direction: "buy" | "sell" | null;
+    confidence: number | null;
+    timestamp: string | null;
+    strategy_id: string | null;
+  } | null;
+  analyst_consensus: {
+    total_analysts: number;
+    strong_buy: number;
+    buy: number;
+    hold: number;
+    sell: number;
+    strong_sell: number;
+    consensus_rating: string | null;
+    consensus_score: number | null;
+    target_price_avg: number | null;
+    target_price_high: number | null;
+    target_price_low: number | null;
+  } | null;
+  upside_to_target_pct: number | null;
+  signal_scores: Record<string, number>;
+}
+
+export interface BotWatchlistResponse {
+  tickers: BotTickerItem[];
+  count: number;
+  engine_running: boolean;
+  loop_count: number;
+  as_of: string;
+}
+
+export const fetchBotWatchlist = (): Promise<BotWatchlistResponse> =>
+  request<BotWatchlistResponse>("/api/bot/watchlist");
+
+// ---------------------------------------------------------------------------
 // AI Analyst
 // ---------------------------------------------------------------------------
 

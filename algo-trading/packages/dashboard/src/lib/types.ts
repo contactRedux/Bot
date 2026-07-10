@@ -208,7 +208,16 @@ export interface AnalysisIndicators {
   sma_20: number;
   sma_50: number;
   sma_200: number;
+  ema_9: number;
+  ema_21: number;
   atr: number;
+  stoch_k: number;
+  stoch_d: number;
+  williams_r: number;
+  cci: number;
+  obv: number;
+  vwap_20: number;
+  volume_ratio: number;
 }
 
 export interface AnalysisSignalScores {
@@ -217,12 +226,31 @@ export interface AnalysisSignalScores {
   bollinger: number;
   ma_trend: number;
   short_trend: number;
+  stochastic: number;
+  williams_r: number;
+  cci: number;
+  ema_cross: number;
+  vwap: number;
 }
 
 export interface AnalysisPriceStats {
   last_price: number;
   pct_change_1d: number;
   pct_change_1m: number;
+}
+
+export interface AnalystConsensus {
+  total_analysts: number;
+  strong_buy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strong_sell: number;
+  consensus_rating: "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell" | null;
+  consensus_score: number | null;   // 1 (Strong Sell) … 5 (Strong Buy)
+  target_price_avg: number | null;
+  target_price_high: number | null;
+  target_price_low: number | null;
 }
 
 export interface AnalysisResponse {
@@ -236,6 +264,7 @@ export interface AnalysisResponse {
   price_stats: AnalysisPriceStats;
   bar_count: number;
   as_of: string;
+  analyst_consensus: AnalystConsensus | null;
 }
 
 // ---------------------------------------------------------------------------
