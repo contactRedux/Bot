@@ -45,8 +45,9 @@ export default function NewsFeed() {
         setFetchMsg(`${res.articles.length} article${res.articles.length !== 1 ? "s" : ""} found (${res.inserted} new saved).`);
       } else {
         setFetchMsg(
-          "No articles found for this ticker from our current sources (NewsAPI + GDELT). " +
-          "Adding a NewsAPI key in .env or the Bloomberg plan will expand coverage."
+          "No articles found from yfinance, NewsAPI, or GDELT for this ticker. " +
+          "The ticker may be too obscure or news sources may be temporarily unavailable. " +
+          "Adding a NewsAPI key in .env will improve coverage."
         );
       }
       setFetchState("done");
@@ -82,7 +83,7 @@ export default function NewsFeed() {
       {/* Ticker search / fetch */}
       <div className="rounded-xl border border-[#e5e5ea] bg-white p-4 space-y-3">
         <p className="text-xs text-[#6e6e73]">
-          Pull live articles for any ticker from NewsAPI + GDELT:
+          Pull live articles for any ticker (yfinance · NewsAPI · GDELT):
         </p>
         <div className="flex gap-2">
           <input

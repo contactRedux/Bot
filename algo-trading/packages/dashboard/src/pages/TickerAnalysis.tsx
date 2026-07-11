@@ -104,9 +104,12 @@ function AnalystConsensusPanel({ consensus }: { consensus: AnalystConsensus | nu
 
   return (
     <div className="rounded-xl border border-[#e5e5ea] bg-white p-4">
-      <div className="mb-3 text-xs font-medium uppercase tracking-wider text-[#6e6e73]">
+      <div className="mb-1 text-xs font-medium uppercase tracking-wider text-[#6e6e73]">
         Wall St. Analyst Consensus · {total} analysts
       </div>
+      <p className="mb-3 text-xs text-[#8e8e93]">
+        Blended from yfinance recommendations summary, individual firm ratings, and aggregate provider score.
+      </p>
 
       <div className="flex flex-wrap items-center gap-4 mb-4">
         {consensus.consensus_rating && (
@@ -118,6 +121,21 @@ function AnalystConsensusPanel({ consensus }: { consensus: AnalystConsensus | nu
           <div className="text-sm text-[#6e6e73]">
             Score <span className="font-mono text-[#1d1d1f]">{consensus.consensus_score.toFixed(2)}</span>
             <span className="text-[#8e8e93]"> / 5.0</span>
+          </div>
+        )}
+        {((consensus.recent_upgrades ?? 0) > 0 || (consensus.recent_downgrades ?? 0) > 0) && (
+          <div className="text-xs text-[#6e6e73]">
+            6-mo actions:
+            {(consensus.recent_upgrades ?? 0) > 0 && (
+              <span className="ml-1 text-[#30d158] font-medium">
+                ▲{consensus.recent_upgrades} upgrades
+              </span>
+            )}
+            {(consensus.recent_downgrades ?? 0) > 0 && (
+              <span className="ml-1 text-[#ff3b30] font-medium">
+                ▼{consensus.recent_downgrades} downgrades
+              </span>
+            )}
           </div>
         )}
       </div>

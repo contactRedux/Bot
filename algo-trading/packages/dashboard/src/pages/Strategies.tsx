@@ -3,6 +3,7 @@
  *
  * Sections:
  *  - Trading Engine control (start / stop, status badge, loop count)
+ *  - Engine Activity log (live per-ticker tick stream)
  *  - Strategy list with enable/disable toggles
  */
 import { useState, useEffect } from "react";
@@ -14,7 +15,8 @@ import {
   stopTrading,
   toggleStrategy,
 } from "@/lib/api";
-import { useTradingStore } from "@/store";
+import { useTradingStore, useEngineTickStore } from "@/store";
+import type { EngineTick } from "@/store";
 
 // ---------------------------------------------------------------------------
 // Engine control panel
@@ -259,6 +261,137 @@ function StrategyList() {
 }
 
 // ---------------------------------------------------------------------------
+// Engine activity log — live tick stream from WS engine_tick events
+// ---------------------------------------------------------------------------
+
+function relTime(ts: string): string {
+  const diffMs = Date.now() - new Date(ts).getTime();
+  const secs = Math.floor(diffMs / 1_000);
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ago`;
+}
+
+function EngineActivityLog() {
+  const ticks = useEngineTickStore((s) => s.ticks);
+  const clearTicks = useEngineTickStore((s) => s.clearTicks);
+  const running = useTradingStore((s) => s.running);
+
+  // Group consecutive skipped ticks for the same ticker into one line
+  const compressed: Array<{ tick: EngineTick; count: number }> = [];
+  for (const tick of ticks) {
+    const last = compressed[compressed.length - 1];
+    if (last && last.tick.ticker === tick.ticker && last.tick.skipped && tick.skipped) {
+      last.count += 1;
+    } else {
+      compressed.push({ tick, count: 1 });
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-[#e5e5ea] bg-white">
+      <div className="flex items-center justify-between border-b border-[#e5e5ea] px-4 py-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[#6e6e73]">
+            Engine Activity
+          </span>
+          {running && (
+            <span className="flex h-2 w-2 items-center justify-center">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-[#30d158]" />
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-[#f5f5f7] px-2 py-0.5 font-mono text-xs text-[#6e6e73]">
+            {ticks.length}
+          </span>
+          {ticks.length > 0 && (
+            <button
+              onClick={clearTicks}
+              className="text-xs text-[#8e8e93] hover:text-[#ff3b30]"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {ticks.length === 0 ? (
+        <div className="px-4 py-8 text-center text-sm text-[#6e6e73]">
+          {running
+            ? "Waiting for tick events — engine polls every 60 s in paper mode…"
+            : "Engine is stopped. Start the engine to see live tick activity."}
+          <p className="mt-2 text-xs text-[#8e8e93]">
+            On weekends and outside market hours the bot still polls every 60 s but sees no new
+            bars, so it logs "already processed" ticks. New trade signals fire when a fresh bar
+            arrives (next market open).
+          </p>
+        </div>
+      ) : (
+        <div className="max-h-72 overflow-y-auto font-mono text-xs">
+          <table className="w-full">
+            <thead className="sticky top-0 bg-[#f5f5f7]">
+              <tr className="text-left text-[10px] uppercase text-[#6e6e73]">
+                <th className="px-3 py-1.5">Ticker</th>
+                <th className="px-3 py-1.5 text-right">Close</th>
+                <th className="px-3 py-1.5 text-right">Orders</th>
+                <th className="px-3 py-1.5 text-right">Equity</th>
+                <th className="px-3 py-1.5">Bar Date</th>
+                <th className="px-3 py-1.5">Status</th>
+                <th className="px-3 py-1.5 text-right">Age</th>
+              </tr>
+            </thead>
+            <tbody>
+              {compressed.map(({ tick: t, count }, i) => (
+                <tr
+                  key={i}
+                  className={`border-t border-[#f0f0f0] ${
+                    t.skipped ? "text-[#8e8e93]" : "text-[#1d1d1f]"
+                  }`}
+                >
+                  <td className="px-3 py-1 font-semibold text-[#007aff]">{t.ticker}</td>
+                  <td className="px-3 py-1 text-right">${t.close.toFixed(2)}</td>
+                  <td className={`px-3 py-1 text-right ${t.orders > 0 ? "font-bold text-[#30d158]" : ""}`}>
+                    {t.orders > 0 ? `+${t.orders}` : "—"}
+                  </td>
+                  <td className="px-3 py-1 text-right">
+                    ${t.equity.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                  </td>
+                  <td className="px-3 py-1 text-[#6e6e73]">
+                    {t.bar_ts.slice(0, 10)}
+                  </td>
+                  <td className="px-3 py-1">
+                    {t.skipped ? (
+                      <span className="text-[#c7c7cc]">
+                        {count > 1 ? `×${count} no new bar` : "no new bar"}
+                      </span>
+                    ) : (
+                      <span className="text-[#30d158]">✓ processed</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1 text-right text-[#8e8e93]">
+                    {relTime(t.timestamp)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Explainer for weekend users */}
+      {ticks.length > 0 && ticks.every((t) => t.skipped) && (
+        <div className="border-t border-[#e5e5ea] px-4 py-2 text-xs text-[#8e8e93]">
+          All ticks show "no new bar" — markets are closed or no new data is available.
+          The engine continues polling and will process the next bar when markets open.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -267,6 +400,7 @@ export default function Strategies() {
     <div className="space-y-6">
       <h1 className="text-xl font-semibold text-[#1d1d1f]">Strategy Manager</h1>
       <EngineControl />
+      <EngineActivityLog />
       <StrategyList />
     </div>
   );

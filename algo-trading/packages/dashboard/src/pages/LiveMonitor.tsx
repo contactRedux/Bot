@@ -171,7 +171,7 @@ export default function LiveMonitor() {
     <div className="space-y-6">
       <h1 className="text-xl font-semibold text-[#1d1d1f]">Live Monitor</h1>
       <PositionPanel />
-      <SignalTable limit={200} />
+      <SignalTable limit={200} equityOnly />
       <FillLog />
     </div>
   );

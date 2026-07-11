@@ -71,8 +71,9 @@ _TICKER_ALIASES: dict[str, list[str]] = {
     "NVDA":    ["nvidia", "nvda", "cuda", "geforce", "jensen huang", "blackwell", "hopper"],
     "TSLA":    ["tesla", "tsla", "elon musk", "elon", "cybertruck", "gigafactory", "autopilot"],
     "AMZN":    ["amazon", "amzn", "aws", "prime", "bezos", "whole foods", "twitch"],
-    "GOOGL":   ["google", "alphabet", "googl", "gemini", "waymo", "deepmind", "youtube", "pixel"],
-    "GOOG":    ["google", "alphabet", "goog"],
+    "GOOGL":   ["google", "alphabet", "googl", "goog", "gemini", "waymo", "deepmind", "youtube", "pixel"],
+    # GOOG is the non-voting share class; articles almost never say "GOOG" specifically.
+    # Keeping an empty-ish entry prevents the fallback from matching the raw symbol.
     "META":    ["meta", "facebook", "instagram", "whatsapp", "zuckerberg", "threads", "oculus", "ray-ban"],
     "NFLX":    ["netflix", "nflx", "reed hastings"],
     "ORCL":    ["oracle", "orcl", "larry ellison"],

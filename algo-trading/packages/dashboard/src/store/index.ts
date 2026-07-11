@@ -205,6 +205,36 @@ export const useWsStore = create<WsStore>((set) => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Engine tick slice — live per-ticker activity log (last 200 entries)
+// ---------------------------------------------------------------------------
+
+export interface EngineTick {
+  ticker: string;
+  close: number;
+  orders: number;
+  equity: number;
+  bar_ts: string;
+  skipped: boolean;
+  skip_reason: string;
+  timestamp: string;  // WS envelope timestamp
+}
+
+interface EngineTickStore {
+  ticks: EngineTick[];
+  addTick: (t: EngineTick) => void;
+  clearTicks: () => void;
+}
+
+export const useEngineTickStore = create<EngineTickStore>((set) => ({
+  ticks: [],
+  addTick: (t) =>
+    set((state) => ({
+      ticks: [t, ...state.ticks].slice(0, 200),
+    })),
+  clearTicks: () => set({ ticks: [] }),
+}));
+
+// ---------------------------------------------------------------------------
 // Trading engine state slice
 // ---------------------------------------------------------------------------
 

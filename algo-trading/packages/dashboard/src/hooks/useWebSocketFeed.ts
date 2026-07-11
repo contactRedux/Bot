@@ -7,6 +7,7 @@ import {
   useFillStore,
   useWsStore,
   useTradingStore,
+  useEngineTickStore,
 } from "@/store";
 import { fetchNews, fetchTradingStatus } from "@/lib/api";
 import type { WSEvent } from "@/lib/types";
@@ -48,6 +49,7 @@ export function useWebSocketFeed() {
   const setLastEvent       = useWsStore((s) => s.setLastEventType);
   const setTradingRunning  = useTradingStore((s) => s.setRunning);
   const setTradingMode     = useTradingStore((s) => s.setTradingMode);
+  const addEngineTick      = useEngineTickStore((s) => s.addTick);
 
   const connect = useCallback(() => {
     if (unmountedRef.current) return;
@@ -131,6 +133,11 @@ export function useWebSocketFeed() {
             addArticle(msg.payload as any);
             break;
 
+          case "engine_tick":
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            addEngineTick({ ...(msg.payload as any), timestamp: msg.timestamp });
+            break;
+
           case "trading_status": {
             const ts = msg.payload as { running: boolean; trading_mode: string };
             setTradingRunning(ts.running ?? false);
@@ -173,6 +180,7 @@ export function useWebSocketFeed() {
     setLastEvent,
     setTradingRunning,
     setTradingMode,
+    addEngineTick,
   ]);
 
   useEffect(() => {

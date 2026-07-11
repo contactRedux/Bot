@@ -33,11 +33,14 @@ function relTime(isoTs: string): string {
 
 interface Props {
   limit?: number;
+  /** When true, hide signals for crypto tickers (those containing "-") */
+  equityOnly?: boolean;
 }
 
-export default function SignalTable({ limit = 50 }: Props) {
+export default function SignalTable({ limit = 50, equityOnly = false }: Props) {
   const signals = useSignalStore((s) => s.signals);
-  const rows: Signal[] = signals.slice(0, limit);
+  const filtered = equityOnly ? signals.filter((s) => !s.ticker.includes("-")) : signals;
+  const rows: Signal[] = filtered.slice(0, limit);
 
   return (
     <div className="rounded-xl border border-[#e5e5ea] bg-white">
@@ -46,7 +49,7 @@ export default function SignalTable({ limit = 50 }: Props) {
           Live Signals
         </span>
         <span className="rounded-full bg-[#f5f5f7] px-2 py-0.5 font-mono text-xs text-[#6e6e73]">
-          {signals.length}
+          {filtered.length}
         </span>
       </div>
 

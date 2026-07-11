@@ -18,7 +18,8 @@ export type WSEventType =
   | "heartbeat"
   | "backtest_progress"
   | "news"
-  | "trading_status";
+  | "trading_status"
+  | "engine_tick";
 
 export interface WSEvent {
   event_type: WSEventType;
@@ -247,10 +248,12 @@ export interface AnalystConsensus {
   sell: number;
   strong_sell: number;
   consensus_rating: "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell" | null;
-  consensus_score: number | null;   // 1 (Strong Sell) … 5 (Strong Buy)
+  consensus_score: number | null;   // 1 (Strong Sell) … 5 (Strong Buy), blended from 3 sources
   target_price_avg: number | null;
   target_price_high: number | null;
   target_price_low: number | null;
+  recent_upgrades?: number;
+  recent_downgrades?: number;
 }
 
 export interface AnalysisResponse {

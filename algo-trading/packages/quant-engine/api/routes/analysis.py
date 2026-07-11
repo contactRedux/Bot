@@ -487,6 +487,58 @@ def _fetch_analyst_consensus(ticker: str) -> dict[str, Any]:
         if n_analysts and int(n_analysts) > empty.get("total_analysts", 0):
             empty["total_analysts"] = int(n_analysts)
 
+        # ── recommendationMean / recommendationKey from yfinance info ──────────
+        # yfinance's recommendationMean: 1=Strong Buy, 2=Buy, 3=Hold, 4=Sell, 5=Strong Sell
+        # This is the aggregate score from all analyst providers (Refinitiv / S&P Global).
+        rec_mean = info.get("recommendationMean")
+        rec_key  = info.get("recommendationKey", "")
+        if rec_mean is not None:
+            # Convert from yfinance 1-5 (lower=better) to our 1-5 (higher=better)
+            yf_score = round(6.0 - float(rec_mean), 2)  # 5=SB … 1=SS
+            if empty.get("consensus_score") is None:
+                # No recommendation breakdown available — use aggregate directly
+                empty["consensus_score"] = yf_score
+                _key_map = {
+                    "strong_buy": "Strong Buy", "buy": "Buy",
+                    "hold": "Hold", "underperform": "Sell", "sell": "Strong Sell",
+                }
+                empty["consensus_rating"] = _key_map.get(
+                    str(rec_key).lower().replace("-", "_"), "Hold"
+                )
+            else:
+                # Blend our breakdown score with the aggregate (50/50 weight)
+                blended = round((empty["consensus_score"] + yf_score) / 2, 2)
+                empty["consensus_score"] = blended
+                # Re-derive rating from blended score
+                if blended >= 4.5:
+                    empty["consensus_rating"] = "Strong Buy"
+                elif blended >= 3.7:
+                    empty["consensus_rating"] = "Buy"
+                elif blended >= 2.8:
+                    empty["consensus_rating"] = "Hold"
+                elif blended >= 2.0:
+                    empty["consensus_rating"] = "Sell"
+                else:
+                    empty["consensus_rating"] = "Strong Sell"
+
+        # ── upgrades/downgrades — count recent analyst actions ───────────────
+        try:
+            upgrades = getattr(tkr, "upgrades_downgrades", None)
+            if upgrades is not None and hasattr(upgrades, "empty") and not upgrades.empty:
+                import pandas as _pd2
+                cutoff2 = _pd2.Timestamp.now(tz="UTC") - _pd2.DateOffset(months=6)
+                if hasattr(upgrades.index, "tz"):
+                    recent_ud = upgrades[upgrades.index >= cutoff2]
+                else:
+                    recent_ud = upgrades.tail(30)
+                if "Action" in recent_ud.columns:
+                    upgrades_count  = int((recent_ud["Action"].str.lower() == "up").sum())
+                    downgrades_count = int((recent_ud["Action"].str.lower() == "down").sum())
+                    empty["recent_upgrades"]   = upgrades_count
+                    empty["recent_downgrades"] = downgrades_count
+        except Exception:
+            pass
+
     except Exception as exc:
         logger.debug("analysis.analyst_consensus_failed ticker=%s error=%s", ticker, exc)
 

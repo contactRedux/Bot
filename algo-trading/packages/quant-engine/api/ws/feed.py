@@ -253,3 +253,28 @@ async def broadcast_trading_status(running: bool, mode: str) -> None:
         "payload": {"running": running, "trading_mode": mode},
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
+
+
+async def broadcast_engine_tick(
+    ticker: str,
+    close: float,
+    orders: int,
+    equity: float,
+    bar_ts: str,
+    skipped: bool = False,
+    skip_reason: str = "",
+) -> None:
+    """Broadcast a single engine tick event to all WebSocket clients."""
+    await manager.broadcast({
+        "event_type": "engine_tick",
+        "payload": {
+            "ticker": ticker,
+            "close": round(close, 4),
+            "orders": orders,
+            "equity": round(equity, 2),
+            "bar_ts": bar_ts,
+            "skipped": skipped,
+            "skip_reason": skip_reason,
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })

@@ -323,6 +323,22 @@ class TradingEngine:
         # Skip if we've already processed this bar
         if self._last_processed.get(ticker) == latest_ts:
             logger.debug("TradingEngine: %s already processed at %s", ticker, latest_ts)
+            # Broadcast a skipped-tick so the dashboard shows the engine is polling
+            close_price = latest_bar.close
+            equity = getattr(self.portfolio, "total_equity", self.initial_capital)
+            try:
+                from api.ws.feed import broadcast_engine_tick
+                await broadcast_engine_tick(
+                    ticker=ticker,
+                    close=close_price,
+                    orders=0,
+                    equity=equity,
+                    bar_ts=latest_ts.isoformat(),
+                    skipped=True,
+                    skip_reason="already processed",
+                )
+            except Exception:
+                pass
             return
 
         # ── 2. Build feature matrix ───────────────────────────────────────────
@@ -399,6 +415,20 @@ class TradingEngine:
             "TradingEngine tick: %s close=%.4f equity=%.2f orders=%d",
             ticker, close_price, equity, len(orders),
         )
+
+        # ── 12. Broadcast tick to WS clients ──────────────────────────────────
+        try:
+            from api.ws.feed import broadcast_engine_tick
+            await broadcast_engine_tick(
+                ticker=ticker,
+                close=close_price,
+                orders=len(orders),
+                equity=equity,
+                bar_ts=latest_ts.isoformat(),
+                skipped=False,
+            )
+        except Exception:
+            pass
 
     async def _build_features(
         self,

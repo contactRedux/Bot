@@ -149,9 +149,10 @@ def _keyword_score(text: str) -> float:
     """
     if not text:
         return 0.0
-    words = text.lower().split()
-    pos = sum(1 for w in words if w.rstrip(".,!?;:") in _POSITIVE_WORDS)
-    neg = sum(1 for w in words if w.rstrip(".,!?;:") in _NEGATIVE_WORDS)
+    # Strip punctuation from each word before matching
+    words = [w.strip(".,!?;:'\"()[]") for w in text.lower().split()]
+    pos = sum(1 for w in words if w in _POSITIVE_WORDS)
+    neg = sum(1 for w in words if w in _NEGATIVE_WORDS)
     total = pos + neg
     if total == 0:
         return 0.0
@@ -164,13 +165,16 @@ def _resolve_score(article) -> float:
 
     Priority:
       1. FinBERT score already stored on the article (most accurate).
-      2. Keyword heuristic applied to the article title (fast fallback).
+      2. Keyword heuristic applied to title + body (fast fallback).
     """
     stored = getattr(article, "sentiment_score", None)
     if stored is not None:
         return float(stored)
+    # Combine title and any available body text for a richer signal
     title = getattr(article, "title", "") or ""
-    return _keyword_score(title)
+    body = getattr(article, "body", "") or ""
+    text = f"{title} {body}".strip()
+    return _keyword_score(text)
 
 
 def _format_articles(articles) -> list[dict]:
@@ -244,9 +248,9 @@ async def fetch_news_for_ticker(
     """
     On-demand live news pull for a specific ticker.
 
-    Queries NewsAPI (if configured) and GDELT directly, writes new articles
-    to the DataStore, and returns what was found.  Useful for pulling articles
-    for tickers not in the pipeline's watched universe.
+    Queries yfinance (free, no key), NewsAPI (if configured), and GDELT,
+    writes new articles to the DataStore, and returns what was found.
+    Useful for pulling articles for tickers not in the pipeline's watched universe.
     """
     import asyncio
 
@@ -261,29 +265,91 @@ async def fetch_news_for_ticker(
 
     loop = asyncio.get_event_loop()
 
-    # NewsAPI pull
+    # ── yfinance news pull (free, no API key required) ────────────────────────
+    # yfinance returns recent news items with titles and URLs for any ticker.
+    try:
+        def _yfin_news() -> list:
+            import hashlib
+            import yfinance as yf  # type: ignore[import]
+            t = yf.Ticker(ticker)
+            raw_items = t.news or []
+            result = []
+            for item in raw_items[:body.limit]:
+                title = item.get("content", {}).get("title") or item.get("title") or ""
+                url = (item.get("content", {}).get("canonicalUrl", {}) or {}).get("url") or item.get("url") or ""
+                # yfinance changed its schema in newer versions — handle both
+                pub_raw = (item.get("content", {}).get("pubDate") or
+                           item.get("providerPublishTime") or
+                           item.get("publishedAt") or "")
+                try:
+                    if isinstance(pub_raw, (int, float)):
+                        pub_dt = datetime.fromtimestamp(float(pub_raw), tz=UTC)
+                    else:
+                        pub_dt = datetime.fromisoformat(str(pub_raw).replace("Z", "+00:00"))
+                except Exception:
+                    pub_dt = datetime.now(UTC)
+                if not title:
+                    continue
+                art_id = hashlib.sha256(f"yfinance|{title}|{pub_dt.isoformat()}".encode()).hexdigest()[:32]
+                from data.schemas import NewsArticle as _NA
+                result.append(_NA(
+                    article_id=art_id,
+                    title=title,
+                    body=None,
+                    url=url or None,
+                    source="yfinance",
+                    author=None,
+                    tickers=[ticker],
+                    event_timestamp=pub_dt,
+                    fetch_timestamp=datetime.now(UTC),
+                    sentiment_score=None,
+                ))
+            return result
+
+        yf_articles = await asyncio.wait_for(
+            loop.run_in_executor(None, _yfin_news),
+            timeout=15.0,
+        )
+        all_articles.extend(yf_articles)
+        logger.info("news.fetch.yfinance ticker=%s count=%d", ticker, len(yf_articles))
+    except asyncio.TimeoutError:
+        logger.warning("news.fetch.yfinance_timeout ticker=%s", ticker)
+    except Exception as exc:
+        logger.warning("news.fetch.yfinance_error ticker=%s error=%s", ticker, exc)
+
+    # ── NewsAPI pull ──────────────────────────────────────────────────────────
     try:
         from config.settings import settings
         if settings.newsapi_key:
             from data.feeds.newsapi_feed import NewsApiFeed
             feed = NewsApiFeed(config={"api_key": settings.newsapi_key})
-            articles = await loop.run_in_executor(
-                None,
-                lambda: feed.fetch_news(tickers=[ticker], start=start, end=end, max_results=body.limit),
+            newsapi_articles = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: feed.fetch_news(tickers=[ticker], start=start, end=end, max_results=body.limit),
+                ),
+                timeout=20.0,
             )
-            all_articles.extend(articles)
+            all_articles.extend(newsapi_articles)
+    except asyncio.TimeoutError:
+        logger.warning("news.fetch.newsapi_timeout ticker=%s", ticker)
     except Exception as exc:
         logger.warning("news.fetch.newsapi_error ticker=%s error=%s", ticker, exc)
 
-    # GDELT pull
+    # ── GDELT pull (best-effort, may be rate-limited) ─────────────────────────
     try:
         from data.feeds.gdelt_feed import GdeltFeed
         gdelt = GdeltFeed()
-        articles = await loop.run_in_executor(
-            None,
-            lambda: gdelt.fetch_news(tickers=[ticker], start=start, end=end, max_results=min(body.limit * 5, 100)),
+        gdelt_articles = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: gdelt.fetch_news(tickers=[ticker], start=start, end=end, max_results=min(body.limit * 5, 100)),
+            ),
+            timeout=20.0,
         )
-        all_articles.extend(articles)
+        all_articles.extend(gdelt_articles)
+    except asyncio.TimeoutError:
+        logger.warning("news.fetch.gdelt_timeout ticker=%s", ticker)
     except Exception as exc:
         logger.warning("news.fetch.gdelt_error ticker=%s error=%s", ticker, exc)
 

@@ -48,8 +48,8 @@ export default function Overview() {
         </div>
       )}
 
-      {/* Recent signals */}
-      <SignalTable limit={20} />
+      {/* Recent signals — equity only (crypto tickers are trading-engine internals) */}
+      <SignalTable limit={20} equityOnly />
     </div>
   );
 }
