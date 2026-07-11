@@ -298,7 +298,10 @@ function PaperTradePanel({ ticker, lastPrice }: { ticker: string; lastPrice: num
 // ---------------------------------------------------------------------------
 
 export default function StockChart() {
-  const [watchlist, setWatchlist]     = useState<string[]>(loadWatchlist);
+  const [watchlist, setWatchlist]     = useState<string[]>(() => {
+    const saved = loadWatchlist();
+    return saved;
+  });
   const [ticker, setTicker]           = useState<string>(() => loadWatchlist()[0] ?? "");
   const [addInput, setAddInput]       = useState("");
   const [range, setRange]             = useState<Range>("1Y");
@@ -377,25 +380,39 @@ export default function StockChart() {
     if (ticker === t) setTicker(next[0] ?? "");
   };
 
+  const handleResetWatchlist = () => {
+    setWatchlist(DEFAULT_WATCHLIST);
+    setTicker(DEFAULT_WATCHLIST[0]);
+  };
+
   return (
     <div className="space-y-5">
       {/* Page header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-[#1d1d1f]">Stock Chart</h1>
-        <form onSubmit={handleAddTicker} className="flex gap-2">
-          <input
-            value={addInput}
-            onChange={(e) => setAddInput(e.target.value.toUpperCase())}
-            placeholder="Add ticker…"
-            className="w-32 rounded-lg border border-[#e5e5ea] bg-[#f5f5f7] px-3 py-1.5 font-mono text-sm text-[#1d1d1f] placeholder-[#8e8e93] focus:border-[#007aff] focus:outline-none"
-          />
+        <div className="flex gap-2">
           <button
-            type="submit"
-            className="rounded-lg border border-[#e5e5ea] px-3 py-1.5 text-xs text-[#6e6e73] hover:border-[#007aff] hover:text-[#007aff]"
+            onClick={handleResetWatchlist}
+            className="rounded-lg border border-[#e5e5ea] px-3 py-1.5 text-xs text-[#8e8e93] hover:border-[#007aff] hover:text-[#007aff]"
+            title="Reset to default watchlist (VOO)"
           >
-            Add
+            Reset
           </button>
-        </form>
+          <form onSubmit={handleAddTicker} className="flex gap-2">
+            <input
+              value={addInput}
+              onChange={(e) => setAddInput(e.target.value.toUpperCase())}
+              placeholder="Add ticker…"
+              className="w-32 rounded-lg border border-[#e5e5ea] bg-[#f5f5f7] px-3 py-1.5 font-mono text-sm text-[#1d1d1f] placeholder-[#8e8e93] focus:border-[#007aff] focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="rounded-lg border border-[#e5e5ea] px-3 py-1.5 text-xs text-[#6e6e73] hover:border-[#007aff] hover:text-[#007aff]"
+            >
+              Add
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* Watchlist pills */}

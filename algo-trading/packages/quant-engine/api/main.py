@@ -282,7 +282,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     if t not in engine_tickers:
                         engine_tickers.append(t)
         if not engine_tickers:
-            engine_tickers = ["AAPL", "MSFT", "NVDA", "BTC-USD", "ETH-USD"]
+            engine_tickers = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "SPY"]
 
         bar_interval = strategy_configs.get("portfolio", {}).get("default_bar_interval", "1d")
 

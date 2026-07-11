@@ -133,7 +133,7 @@ function ReportView({ report }: { report: AiAnalystReport }) {
 function HistoryPanel({ onSelect }: { onSelect: (r: AiAnalystReport) => void }) {
   const { data } = useQuery({
     queryKey: ["ai-history"],
-    queryFn: () => fetchAiHistory(20),
+    queryFn: () => fetchAiHistory(20).catch(() => ({ reports: [], count: 0 })),
     staleTime: 10_000,
   });
 

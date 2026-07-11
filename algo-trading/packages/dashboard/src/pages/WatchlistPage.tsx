@@ -22,7 +22,7 @@ function loadTickers(): string[] {
       if (Array.isArray(p)) return p;
     }
   } catch { /* ignore */ }
-  return ["AAPL", "MSFT", "NVDA", "TSLA", "AMD"];
+  return ["VOO", "SPY", "QQQ", "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AMD", "JPM", "V", "COST", "BRK-B"];
 }
 
 function saveTickers(t: string[]) {

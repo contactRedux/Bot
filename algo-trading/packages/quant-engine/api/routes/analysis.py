@@ -399,7 +399,8 @@ def _fetch_analyst_consensus(ticker: str) -> dict[str, Any]:
         import yfinance as yf  # type: ignore[import]
         tkr = yf.Ticker(ticker)
 
-        # ── Recommendation summary (strong_buy/buy/hold/sell/strong_sell counts) ──
+        # ── Source 1: recommendations_summary (most recent month counts) ──────
+        sb = b = h = s = ss = 0
         rec_summary = getattr(tkr, "recommendations_summary", None)
         if rec_summary is not None and hasattr(rec_summary, "empty") and not rec_summary.empty:
             # Most recent period is the first row
@@ -409,32 +410,67 @@ def _fetch_analyst_consensus(ticker: str) -> dict[str, Any]:
             h   = int(row.get("hold",        0))
             s   = int(row.get("sell",        0))
             ss  = int(row.get("strongSell",  0))
-            total = sb + b + h + s + ss
-            if total > 0:
-                # Weighted score: SB=5, B=4, H=3, S=2, SS=1
-                score = (sb * 5 + b * 4 + h * 3 + s * 2 + ss * 1) / total
-                if score >= 4.5:
-                    rating = "Strong Buy"
-                elif score >= 3.7:
-                    rating = "Buy"
-                elif score >= 2.8:
-                    rating = "Hold"
-                elif score >= 2.0:
-                    rating = "Sell"
-                else:
-                    rating = "Strong Sell"
-                empty.update({
-                    "total_analysts": total,
-                    "strong_buy": sb,
-                    "buy": b,
-                    "hold": h,
-                    "sell": s,
-                    "strong_sell": ss,
-                    "consensus_rating": rating,
-                    "consensus_score": round(score, 2),
-                })
 
-        # ── Price targets ──────────────────────────────────────────────────────
+        # ── Source 2: recommendations (individual analyst history, last 3 months) ──
+        # yfinance .recommendations returns a DataFrame with a "To Grade" column.
+        # We aggregate the most recent rating per analyst firm to avoid double-counting.
+        recs = getattr(tkr, "recommendations", None)
+        if recs is not None and hasattr(recs, "empty") and not recs.empty:
+            try:
+                # Normalize grade names → our 5-bucket scheme
+                _GRADE_MAP = {
+                    "strong buy": "SB", "top pick": "SB",
+                    "buy": "B", "outperform": "B", "overweight": "B", "long-term buy": "B",
+                    "market perform": "H", "neutral": "H", "hold": "H", "equal-weight": "H",
+                    "equal weight": "H", "sector perform": "H", "sector weight": "H",
+                    "in-line": "H", "peer perform": "H",
+                    "underperform": "S", "underweight": "S", "reduce": "S",
+                    "sell": "SS", "strong sell": "SS",
+                }
+                # Keep last 3 months of recommendations
+                from datetime import timezone as _tz
+                import pandas as _pd
+                cutoff = _pd.Timestamp.now(tz="UTC") - _pd.DateOffset(months=3)
+                recent = recs[recs.index >= cutoff] if hasattr(recs.index, "tz") else recs.tail(60)
+                # Get most recent rating per firm
+                if "Firm" in recent.columns and "To Grade" in recent.columns:
+                    latest_per_firm = recent.sort_index().groupby("Firm")["To Grade"].last()
+                    for grade in latest_per_firm:
+                        bucket = _GRADE_MAP.get(str(grade).lower().strip(), None)
+                        if bucket == "SB":   sb += 1
+                        elif bucket == "B":  b  += 1
+                        elif bucket == "H":  h  += 1
+                        elif bucket == "S":  s  += 1
+                        elif bucket == "SS": ss += 1
+            except Exception as _recs_exc:
+                logger.debug("analysis.recs_parse_error ticker=%s error=%s", ticker, _recs_exc)
+
+        total = sb + b + h + s + ss
+        if total > 0:
+            # Weighted score: SB=5, B=4, H=3, S=2, SS=1
+            score = (sb * 5 + b * 4 + h * 3 + s * 2 + ss * 1) / total
+            if score >= 4.5:
+                rating = "Strong Buy"
+            elif score >= 3.7:
+                rating = "Buy"
+            elif score >= 2.8:
+                rating = "Hold"
+            elif score >= 2.0:
+                rating = "Sell"
+            else:
+                rating = "Strong Sell"
+            empty.update({
+                "total_analysts": total,
+                "strong_buy": sb,
+                "buy": b,
+                "hold": h,
+                "sell": s,
+                "strong_sell": ss,
+                "consensus_rating": rating,
+                "consensus_score": round(score, 2),
+            })
+
+        # ── Price targets (from info dict) ────────────────────────────────────
         info = tkr.info or {}
         tp_avg  = info.get("targetMeanPrice")
         tp_high = info.get("targetHighPrice")
@@ -445,6 +481,11 @@ def _fetch_analyst_consensus(ticker: str) -> dict[str, Any]:
             empty["target_price_high"] = round(float(tp_high), 2)
         if tp_low:
             empty["target_price_low"]  = round(float(tp_low),  2)
+
+        # ── numberOfAnalystOpinions from info (override total if higher) ─────
+        n_analysts = info.get("numberOfAnalystOpinions")
+        if n_analysts and int(n_analysts) > empty.get("total_analysts", 0):
+            empty["total_analysts"] = int(n_analysts)
 
     except Exception as exc:
         logger.debug("analysis.analyst_consensus_failed ticker=%s error=%s", ticker, exc)

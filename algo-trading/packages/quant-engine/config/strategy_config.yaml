@@ -60,24 +60,52 @@ momentum:
 
   # Universe of tickers this strategy trades (overridden at runtime via CLI)
   default_tickers:
-    # Large-cap tech
+    # Large-cap tech (Nasdaq-100 / S&P 500 mega-caps)
     - "AAPL"
     - "MSFT"
     - "NVDA"
     - "TSLA"
     - "AMZN"
     - "GOOGL"
+    - "GOOG"
     - "META"
     - "NFLX"
-    # Semiconductors / hardware
+    - "ORCL"
+    - "ADBE"
+    - "CRM"
+    - "NOW"
+    - "INTU"
+    - "SNPS"
+    - "CDNS"
+    - "WDAY"
+    # Semiconductors
     - "AMD"
     - "INTC"
     - "QCOM"
     - "MU"
     - "AVGO"
-    - "TSM"
     - "AMAT"
+    - "LRCX"
+    - "KLAC"
+    - "TXN"
+    - "MCHP"
+    - "NXPI"
+    - "ON"
     - "SNDK"
+    - "MRVL"
+    - "ADI"
+    # High-momentum growth
+    - "PANW"
+    - "FTNT"
+    - "CRWD"
+    - "ZS"
+    - "DDOG"
+    - "MELI"
+    - "SHOP"
+    - "SPOT"
+    - "UBER"
+    - "ABNB"
+    - "COIN"
     # Crypto
     - "BTC-USD"
     - "ETH-USD"
@@ -106,19 +134,71 @@ mean_reversion:
   bollinger_std: 2.0
 
   default_tickers:
+    # Core ETFs / benchmarks
+    - "SPY"
+    - "QQQ"
+    - "VOO"
+    - "IWM"
+    - "DIA"
+    # Tech mega-caps
     - "AAPL"
     - "MSFT"
     - "GOOGL"
     - "META"
-    - "SPY"
-    - "QQQ"
-    - "VOO"
     - "NVDA"
     - "AMD"
+    - "NFLX"
+    - "AMZN"
+    - "TSLA"
+    # Financials
     - "JPM"
     - "GS"
+    - "BAC"
+    - "WFC"
+    - "MS"
+    - "V"
+    - "MA"
+    - "AXP"
+    - "BX"
+    - "SCHW"
+    # Energy
     - "XOM"
     - "CVX"
+    - "COP"
+    - "SLB"
+    - "EOG"
+    # Healthcare
+    - "JNJ"
+    - "UNH"
+    - "LLY"
+    - "ABBV"
+    - "PFE"
+    - "MRK"
+    - "BMY"
+    - "TMO"
+    - "ABT"
+    - "AMGN"
+    # Consumer
+    - "WMT"
+    - "COST"
+    - "HD"
+    - "MCD"
+    - "SBUX"
+    - "NKE"
+    - "TGT"
+    - "PG"
+    - "KO"
+    - "PEP"
+    # Industrials / other
+    - "CAT"
+    - "HON"
+    - "GE"
+    - "MMM"
+    - "IBM"
+    - "BA"
+    - "RTX"
+    - "LMT"
+    - "NOC"
 
 
 # ── Strategy: Statistical Arbitrage (Pairs Trading) ──────────────────────────
@@ -181,6 +261,11 @@ market_making:
     - "NVDA"
     - "AMD"
     - "GOOGL"
+    - "AMZN"
+    - "META"
+    - "TSLA"
+    - "SPY"
+    - "QQQ"
     - "BTC-USD"
     - "ETH-USD"
 
@@ -208,6 +293,7 @@ sentiment:
   max_hold_bars: 8
 
   default_tickers:
+    # High news-sensitivity tickers
     - "AAPL"
     - "TSLA"
     - "NVDA"
@@ -216,6 +302,18 @@ sentiment:
     - "GOOGL"
     - "META"
     - "AMD"
+    - "NFLX"
+    - "COIN"
+    - "RIVN"
+    - "LCID"
+    - "SNAP"
+    - "UBER"
+    - "ABNB"
+    - "SHOP"
+    - "MRNA"
+    - "BNTX"
+    - "PFE"
+    - "BA"
     - "BTC-USD"
     - "ETH-USD"
 
@@ -247,16 +345,30 @@ kelly_vol:
   rebalance_bars: 5
 
   default_tickers:
+    # ETF benchmarks
+    - "SPY"
+    - "QQQ"
+    - "VOO"
+    - "IWM"
+    - "GLD"
+    - "TLT"
+    # Mega-cap equities
     - "AAPL"
     - "MSFT"
     - "NVDA"
     - "GOOGL"
     - "TSLA"
-    - "SPY"
-    - "QQQ"
-    - "VOO"
     - "AMZN"
     - "META"
+    - "BRK-B"
+    - "LLY"
+    - "UNH"
+    - "JPM"
+    - "V"
+    - "COST"
+    - "HD"
+    - "XOM"
+    - "AVGO"
 
 
 # ── Strategy: Kalman Filter Trend Following ───────────────────────────────────
@@ -289,15 +401,21 @@ kalman_trend:
   position_size_scale: 1.0
 
   default_tickers:
+    # Trending tickers with strong Kalman filter signals
     - "AAPL"
     - "MSFT"
     - "NVDA"
     - "AMZN"
     - "TSLA"
-    - "BTC-USD"
-    - "ETH-USD"
     - "GOOGL"
     - "META"
+    - "AMD"
+    - "AVGO"
+    - "NFLX"
+    - "SPY"
+    - "QQQ"
+    - "BTC-USD"
+    - "ETH-USD"
 
 
 # ── Strategy: VWAP Mean Reversion ────────────────────────────────────────────
@@ -330,18 +448,47 @@ vwap_reversion:
   min_bars: 25
 
   default_tickers:
+    # High-liquidity, high-volume — VWAP works best here
     - "AAPL"
     - "MSFT"
     - "NVDA"
     - "GOOGL"
     - "AMZN"
     - "META"
-    - "SPY"
-    - "QQQ"
-    - "VOO"
     - "TSLA"
     - "AMD"
     - "NFLX"
+    - "AVGO"
+    - "INTC"
+    - "QCOM"
+    - "MU"
+    - "SPY"
+    - "QQQ"
+    - "VOO"
+    - "IWM"
+    - "JPM"
+    - "GS"
+    - "BAC"
+    - "V"
+    - "MA"
+    - "WMT"
+    - "COST"
+    - "HD"
+    - "XOM"
+    - "CVX"
+    - "JNJ"
+    - "UNH"
+    - "LLY"
+    - "ABBV"
+    - "TMO"
+    - "CAT"
+    - "GE"
+    - "HON"
+    - "IBM"
+    - "DIS"
+    - "CRM"
+    - "NOW"
+    - "BRK-B"
 
 
 # ── Strategy: Macro Factor ────────────────────────────────────────────────────
